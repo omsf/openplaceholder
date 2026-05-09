@@ -1,0 +1,33 @@
+[generator]
+implementation = "openplaceholder.impl.generators:OpenFold3Generator"
+n_structures = 5
+sequence = "MGSPASDPTVFHKRYLKKIRDLGEGHFGKVSLYCYDPTNDGTGEMVAVKALKADAGPQHRSGWKQEIDILRTLYHEHIIKYKGCCEDAGAASLQLVMEYVPLGSLRDYLPRHSIGLAQLLLFAQQICEGMAYLHAQHYIHRNLAARNVLLDNDRLVKIGDFGLAKAVPEGHEYYRVREDGDSPVFWYAPECLKEYKFYYASDVWSFGVTLYELLTHCDSSQSPPTKFLELIGIAQGQMTVLRLTELLERGERLPRPDKCPAEVYHLMKNCWETEASFRPTFENLIPILKTVHEKYRHHHHHH"
+ligands = {'lig_ejm_31': 'CC(=O)Nc1cc(NC(=O)c2c(Cl)cccc2Cl)ccn1',
+ 'lig_ejm_42': 'CCC(=O)Nc1cc(NC(=O)c2c(Cl)cccc2Cl)ccn1',
+ 'lig_ejm_43': 'CC(C)C(=O)Nc1cc(NC(=O)c2c(Cl)cccc2Cl)ccn1',
+ 'lig_ejm_46': 'O=C(Nc1ccnc(NC(=O)C2CC2)c1)c1c(Cl)cccc1Cl',
+ 'lig_ejm_47': 'O=C(Nc1ccnc(NC(=O)C2CCC2)c1)c1c(Cl)cccc1Cl',
+ 'lig_ejm_48': 'O=C(Nc1ccnc(NC(=O)C2CCCC2)c1)c1c(Cl)cccc1Cl',
+ 'lig_ejm_50': 'O=C(CO)Nc1cc(NC(=O)c2c(Cl)cccc2Cl)ccn1',
+ 'lig_jmc_23': 'O=C(Nc1ccnc(NC(=O)[C@H]2C[C@H]2F)c1)c1c(Cl)cccc1Cl',
+ 'lig_jmc_27': 'O=C(Nc1ccnc(NC(=O)[C@H]2C[C@H]2Cl)c1)c1c(Cl)cccc1Cl',
+ 'lig_jmc_28': 'C[C@@H]1C[C@@H]1C(=O)Nc1cc(NC(=O)c2c(Cl)cccc2Cl)ccn1'}
+
+# per-structure physical/chemical validation. each must pass.
+# multiple validators can be stacked.
+[[selection.validators]]
+implementation = "openplaceholder.impl.validators:PosebustersValidator"
+
+# cross-structure consensus filtration. multiple filters can be stacked.
+[[selection.filtration]]
+implementation = "openplaceholder.impl.filters:PROLIFFilter"
+minimum_fraction = 0.6
+
+[selection.selector]
+implementation = "openplaceholder.impl.selectors:FirstSelector"
+
+[assembly.transformation]
+implementation = "openplaceholder.impl.transformations:MaxVolumeSiteTransformation"
+
+[assembly.mapping]
+implementation = "openplaceholder.impl.mappers:LOMAPMapper"
