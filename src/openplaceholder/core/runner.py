@@ -13,12 +13,17 @@ from openplaceholder.core.structure.structure import Structure
 
 
 def run_serial(pipeline: Pipeline) -> AlchemicalNetwork:
+    """Naive and simple implementation for running a pipeline.
+
+    This differs from an iterative approach in that a pipeline must
+    have all types validated during construction.
+    """
     generator = cast(StructureGenerator, pipeline.generator.instance)
     selector = cast(Selector, pipeline.selector.instance)
     mapper = cast(Mapper, pipeline.mapping.instance)
     transformation = cast(Transformation, pipeline.transformation.instance) if pipeline.transformation else None
 
-    selected: list[Structure] = []
+    selected_structures: list[Structure] = []
     for artifact in generator.run():
         structures: list[Structure] = artifact.structures
 
@@ -31,10 +36,10 @@ def run_serial(pipeline: Pipeline) -> AlchemicalNetwork:
                 f = cast(Filter, step.instance)
                 structures = f.filter(structures)
 
-        selected.append(selector.select(structures))
+        selected_structures.append(selector.select(structures))
 
     if transformation is not None:
-        selected = transformation.transform(selected)
+        selected_structures = transformation.transform(selected_structures)
 
     # TODO: technically not the last step, but will leave this here for now
-    return mapper.map(selected)
+    return mapper.map(selected_structures)
