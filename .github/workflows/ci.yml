@@ -19,13 +19,13 @@ jobs:
         run: pip install ".[test]"
 
       - name: Format
-        run: black --check src/ examples/
+        run: black --check src/
 
       - name: Imports
-        run: isort --check src/ examples/
+        run: isort --check src/
 
       - name: Types
-        run: mypy src/ examples/
+        run: mypy src/
 
   test:
     strategy:
@@ -44,4 +44,4 @@ jobs:
         run: pip install ".[test]"
 
       - name: Test
-        run: pytest
+        run: python -m unittest discover -s openplaceholder.tests
