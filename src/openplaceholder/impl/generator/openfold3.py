@@ -15,9 +15,9 @@ from openplaceholder.core.generation.generator import (
 class OpenFold3GeneratorConfig:
     sequence: str
     ligands: dict[str, str]
-    n_structures: int = 5
-    seeds: list[int]
     diffusion_samples: int
+    seeds: list[int]
+    n_structures: int = 5
 
 
 class OpenFold3Generator(StructureGenerator):
