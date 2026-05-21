@@ -18,24 +18,21 @@ def run_serial(pipeline: Pipeline) -> AlchemicalNetwork:
     This differs from an iterative approach in that a pipeline must
     have all types validated during construction.
     """
-    generator = cast(StructureGenerator, pipeline.generator.instance)
-    selector = cast(Selector, pipeline.selector.instance)
-    mapper = cast(Mapper, pipeline.mapping.instance)
-    transformation = cast(Transformation, pipeline.transformation.instance) if pipeline.transformation else None
+    generator = pipeline.generator
+    selector = pipeline.selector
+    mapper = pipeline.mapping
+    transformation = pipeline.transformation
 
     selected_structures: list[Structure] = []
     for artifact in generator.run():
         structures: list[Structure] = artifact.structures
 
-        for step in pipeline.validators:
-            v = cast(Validator, step.instance)
-            structures = v.validate(structures)
+        for validator in pipeline.validators:
+            structures = validator.validate(structures)
 
         if pipeline.filters is not None:
-            for step in pipeline.filters:
-                f = cast(Filter, step.instance)
-                structures = f.filter(structures)
-
+            for filt in pipeline.filters:
+                structures = filt.filter(structures)
         selected_structures.append(selector.select(structures))
 
     if transformation is not None:

@@ -1,18 +1,20 @@
 from dataclasses import dataclass
 
-
-@dataclass(frozen=True, eq=True)
-class Step:
-    instance: object
+from openplaceholder.core.assembly.mapper import Mapper
+from openplaceholder.core.assembly.transformation import Transformation
+from openplaceholder.core.generation.generator import StructureGenerator
+from openplaceholder.core.selection.filter import Filter
+from openplaceholder.core.selection.selector import Selector
+from openplaceholder.core.selection.validator import Validator
 
 
 @dataclass(frozen=True, eq=True)
 class Pipeline:
-    generator: Step
-    validators: list[Step]
-    filters: list[Step] | None
-    selector: Step
+    generator: StructureGenerator
+    validators: list[Validator]
+    filters: list[Filter] | None
+    selector: Selector
     # TODO: layered transformations? these might be order dependent so
     # need to be careful
-    transformation: Step | None
-    mapping: Step
+    transformation: Transformation | None
+    mapping: Mapper

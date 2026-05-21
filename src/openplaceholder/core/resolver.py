@@ -5,10 +5,10 @@ from pathlib import Path
 from typing import Any
 
 from openplaceholder.core.loader import load_class, resolve_config_type
-from openplaceholder.core.pipeline import Pipeline, Step
+from openplaceholder.core.pipeline import Pipeline
 
 
-def _build_plugin(section: dict[str, Any]) -> Step:
+def _build_plugin(section: dict[str, Any]) -> Any:
     qualname: str = section.pop("implementation")
     cls = load_class(qualname)
     config_type = resolve_config_type(cls)
@@ -24,7 +24,7 @@ def _build_plugin(section: dict[str, Any]) -> Step:
     except TypeError as e:
         msg = f"Missing class initialization parameters: {e.args[0]}"
         raise ValueError(e)
-    return Step(instance=instance)
+    return cls(config)
 
 
 def load_toml(path: str | Path) -> dict[str, Any]:
