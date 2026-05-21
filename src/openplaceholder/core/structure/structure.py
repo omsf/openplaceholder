@@ -13,6 +13,10 @@ class StructureFormat(StrEnum):
     MMCIF = "MMCIF"
     PDB = "PDB"
 
+    @staticmethod
+    def supported_formats() -> set[str]:
+        return {sf.to_suffix() for sf in StructureFormat}
+
     def to_suffix(self) -> str:
         return f".{self.value.lower()}"
 
@@ -54,6 +58,9 @@ class Structure:
 @dataclass(frozen=True, eq=True)
 class StructureSet:
     structures: list[Structure]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "structures", sorted(self.structures, key=lambda s: s.key))
 
     @classmethod
     def from_structures(cls, structures: list[Structure]) -> Self:

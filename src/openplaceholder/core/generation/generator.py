@@ -10,6 +10,7 @@ class StructureGeneratorArtifact(StructureSet):
 
     sequence: str
     ligand_smiles: str
+    ligand_name: str
 
     @classmethod
     def from_structures(cls, structures: list[Structure]) -> Self:
@@ -17,17 +18,20 @@ class StructureGeneratorArtifact(StructureSet):
 
         sequences = set()
         ligands_smiles = set()
+        ligands_name = set()
         for structure in structures:
             sequences.add(structure.sequence)
             ligands_smiles.add(structure.ligand_smiles)
+            ligands_name.add(structure.ligand_name)
 
-        if len(sequences) > 1 or len(ligands_smiles) > 1:
+        if len(sequences) > 1 or len(ligands_smiles) > 1 or len(ligands_name) > 1:
             raise ValueError("Structures do not represent the same complex")
 
         sequence = sequences.pop()
         ligand_smiles = ligands_smiles.pop()
+        ligand_name = ligands_name.pop()
 
-        return cls(structures=structures, sequence=sequence, ligand_smiles=ligand_smiles)
+        return cls(structures=structures, sequence=sequence, ligand_smiles=ligand_smiles, ligand_name=ligand_name)
 
 
 class StructureGenerator(ABC):

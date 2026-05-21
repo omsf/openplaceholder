@@ -1,7 +1,5 @@
 import base64
-import dataclasses
 import json
-import random
 import tempfile
 from pathlib import Path
 from unittest import TestCase, skip
@@ -11,6 +9,7 @@ from openplaceholder.core.structure.structure import (
     StructureFormat,
     StructureSet,
 )
+from openplaceholder.tests.helpers import make_structures
 
 BENZENE_SMILES = "C1=CC=CC=C1"
 PHENOL_SMILES = "C1=CC=C(C=C1)O"
@@ -84,32 +83,8 @@ class TestStructure(TestCase):
 class TestStructureSet(TestCase):
 
     def setUp(self) -> None:
-
-        benzene_template_structure = Structure(
-            sequence="MGSPASDPTVFHKRYLKKIRDLGEGHFGKVSLYCYDPTNDGTGEMVAVKALKADAGPQHRSGWKQEIDILRTLYHEHIIKYKGCCEDAGAASLQLVMEYVPLGSLRDYLPRHSIGLAQLLLFAQQICEGMAYLHAQHYIHRNLAARNVLLDNDRLVKIGDFGLAKAVPEGHEYYRVREDGDSPVFWYAPECLKEYKFYYASDVWSFGVTLYELLTHCDSSQSPPTKFLELIGIAQGQMTVLRLTELLERGERLPRPDKCPAEVYHLMKNCWETEASFRPTFENLIPILKTVHEKYRHHHHHH",
-            ligand_smiles=BENZENE_SMILES,
-            ligand_name="benzene",
-            structure_format="mmcif",
-            structure_data="",
-        )
-
-        phenol_template_structure = dataclasses.replace(
-            benzene_template_structure, ligand_name="phenol", ligand_smiles=PHENOL_SMILES
-        )
-
-        self.structures = []
-        self.structures += [
-            dataclasses.replace(
-                benzene_template_structure, structure_data=base64.b64encode(random.randbytes(8)).decode()
-            )
-            for _ in range(25)
-        ]
-        self.structures += [
-            dataclasses.replace(
-                phenol_template_structure, structure_data=base64.b64encode(random.randbytes(8)).decode()
-            )
-            for _ in range(25)
-        ]
+        self.structures = make_structures(n_structures=25, ligand_name="benzene")
+        self.structures += make_structures(n_structures=25, ligand_name="phenol", ligand_smiles=PHENOL_SMILES)
 
     def test_from_structures(self) -> None:
         ss_one_to_one = StructureSet.from_structures(self.structures)
