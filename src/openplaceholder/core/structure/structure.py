@@ -2,8 +2,10 @@
 
 import base64
 import hashlib
-from dataclasses import dataclass, fields
+import json
+from dataclasses import asdict, dataclass, fields
 from enum import StrEnum
+from pathlib import Path
 from typing import Self
 
 
@@ -43,4 +45,32 @@ class Structure:
     @property
     def key(self) -> str:
         parts = [getattr(self, f.name) for f in fields(self)]
-        return hashlib.sha256("|".join(parts).encode()).hexdigest()
+        return hashlib.sha256("\x00".join(parts).encode()).hexdigest()
+
+    def same_complex(self, other: Self) -> bool:
+        raise NotImplementedError
+
+
+@dataclass(frozen=True, eq=True)
+class StructureSet:
+    structures: list[Structure]
+
+    @classmethod
+    def from_structures(cls, structures: list[Structure]) -> Self:
+        return cls(structures=[*{*structures}])
+
+    @classmethod
+    def from_file(cls, file_path: str | Path) -> Self:
+        file_path = Path(file_path)
+        content = json.loads(file_path.read_text())
+        structures = [Structure(**structure) for structure in content["structures"]]
+        artifact_data = content | {"structures": structures}
+        return cls(**artifact_data)
+
+    def write(self, file_path: str | Path) -> None:
+        file_path = Path(file_path)
+        with open(file_path, "w") as f:
+            json.dump(asdict(self), f)
+
+    def __len__(self) -> int:
+        return len(self.structures)

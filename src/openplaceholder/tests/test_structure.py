@@ -1,9 +1,19 @@
 import base64
-from unittest import TestCase
+import dataclasses
+import json
+import random
+import tempfile
+from pathlib import Path
+from unittest import TestCase, skip
 
-from openplaceholder.core.structure.structure import Structure, StructureFormat
+from openplaceholder.core.structure.structure import (
+    Structure,
+    StructureFormat,
+    StructureSet,
+)
 
 BENZENE_SMILES = "C1=CC=CC=C1"
+PHENOL_SMILES = "C1=CC=C(C=C1)O"
 
 
 class TestStructureFormat(TestCase):
@@ -65,3 +75,65 @@ class TestStructure(TestCase):
         a = Structure("SEQ", BENZENE_SMILES, "lig", "mmcif", "data")
         b = Structure("SEQ", BENZENE_SMILES, "lig", "mmcif", "different_data")
         assert a.key != b.key
+
+    @skip("")
+    def test_same_complex(self) -> None:
+        raise NotImplementedError
+
+
+class TestStructureSet(TestCase):
+
+    def setUp(self) -> None:
+
+        benzene_template_structure = Structure(
+            sequence="MGSPASDPTVFHKRYLKKIRDLGEGHFGKVSLYCYDPTNDGTGEMVAVKALKADAGPQHRSGWKQEIDILRTLYHEHIIKYKGCCEDAGAASLQLVMEYVPLGSLRDYLPRHSIGLAQLLLFAQQICEGMAYLHAQHYIHRNLAARNVLLDNDRLVKIGDFGLAKAVPEGHEYYRVREDGDSPVFWYAPECLKEYKFYYASDVWSFGVTLYELLTHCDSSQSPPTKFLELIGIAQGQMTVLRLTELLERGERLPRPDKCPAEVYHLMKNCWETEASFRPTFENLIPILKTVHEKYRHHHHHH",
+            ligand_smiles=BENZENE_SMILES,
+            ligand_name="benzene",
+            structure_format="mmcif",
+            structure_data="",
+        )
+
+        phenol_template_structure = dataclasses.replace(
+            benzene_template_structure, ligand_name="phenol", ligand_smiles=PHENOL_SMILES
+        )
+
+        self.structures = []
+        self.structures += [
+            dataclasses.replace(
+                benzene_template_structure, structure_data=base64.b64encode(random.randbytes(8)).decode()
+            )
+            for _ in range(25)
+        ]
+        self.structures += [
+            dataclasses.replace(
+                phenol_template_structure, structure_data=base64.b64encode(random.randbytes(8)).decode()
+            )
+            for _ in range(25)
+        ]
+
+    def test_from_structures(self) -> None:
+        ss_one_to_one = StructureSet.from_structures(self.structures)
+        assert len(ss_one_to_one) == len(self.structures)
+
+        ss_doubled_input = StructureSet.from_structures(self.structures + self.structures)
+        assert len(ss_doubled_input) == len(self.structures)
+
+    def test_write(self) -> None:
+        ss = StructureSet.from_structures(self.structures)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "structures.json"
+            ss.write(path)
+            assert path.exists()
+            content = json.loads(path.read_text())
+            assert "structures" in content
+            assert len(content["structures"]) == len(self.structures), len(content["structures"])
+
+    def test_from_file(self) -> None:
+        ss = StructureSet.from_structures(self.structures)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "structures.json"
+            ss.write(path)
+            loaded = StructureSet.from_file(path)
+            assert len(loaded) == len(self.structures)
+            loaded_deduped = StructureSet.from_structures(loaded.structures)
+            assert len(loaded_deduped) == len(loaded)
