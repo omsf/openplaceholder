@@ -9,22 +9,22 @@ from openplaceholder.core.pipeline import Pipeline
 
 
 def _build_plugin(section: dict[str, Any]) -> Any:
-    qualname: str = section.pop("implementation")
+    _section = section.copy()
+    qualname: str = _section.pop("implementation")
     cls = load_class(qualname)
     config_type = resolve_config_type(cls)
 
     field_names = {f.name for f in dataclasses.fields(config_type)}
-    if extra := set(section) - field_names:
+    if extra := set(_section) - field_names:
         msg = f"Unknown fields for {config_type.__name__}: {extra}"
         raise ValueError(msg)
 
     try:
-        config = config_type(**section)
-        instance = cls(config=config_type(**section))
+        instance = cls(config=config_type(**_section))
     except TypeError as e:
         msg = f"Missing class initialization parameters: {e.args[0]}"
         raise ValueError(e)
-    return cls(config)
+    return instance
 
 
 def load_toml(path: str | Path) -> dict[str, Any]:
