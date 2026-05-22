@@ -1,5 +1,3 @@
-from typing import cast
-
 from gufe import AlchemicalNetwork
 
 from openplaceholder.core.assembly.mapper import Mapper
