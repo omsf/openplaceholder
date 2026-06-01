@@ -153,7 +153,7 @@ experiment_settings:
 
     def _build_subprocess_command(self) -> list[str]:
         exe = cast(str, self._config.run_openfold_path)
-        cmd = [exe, "--query-json", "./queries.json", "--outputdir", "./output/", "--runner-yaml", "./runner.yml"]
+        cmd = [exe,"predict",  "--query-json", "./queries.json", "--output-dir", "./output/", "--runner-yaml", "./runner.yml"]
         return cmd
 
     def _clean_up(self) -> None:
