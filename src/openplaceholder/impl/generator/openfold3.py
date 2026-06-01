@@ -119,7 +119,7 @@ experiment_settings:
         artifacts = []
 
         output_dir = Path(self._config.output_directory)
-        seqeunce = self._config.seqeunce
+        sequence = self._config.sequence
         queries = self._query_map()["queries"]
 
         for query_name, query in queries.items():
@@ -133,7 +133,9 @@ experiment_settings:
                 raise RuntimeError("Could not find smiles string for ligand")
 
             for output_file in query_output.rglob("*"):
-                if output_file not in StructureFormat.supported_formats:
+                try:
+                    structure_format = StructureFormat.from_suffix(output_file.suffix)
+                except ValueError:
                     continue
 
                 structure_params = dict(

@@ -1,13 +1,14 @@
-import unittest
 import tempfile
+import unittest
+
 
 def generate_fake_run_output(out_dir: Path):
-    import random
     import pathlib
+    import random
 
     output_dir = pathlib.Path() / "sample_output"
     padded = lambda s: f"{s:0>2}"
-    padded_range = lambda n: map(padded, range(1, n+1))
+    padded_range = lambda n: map(padded, range(1, n + 1))
 
     for lig_num in padded_range(20):
         lig = f"lig_{lig_num}"
@@ -19,6 +20,7 @@ def generate_fake_run_output(out_dir: Path):
                 output_dir.mkdir(exist_ok=True, parents=True)
                 file_path = output_dir / basename
                 file_path.write_bytes(random.randbytes(8))
+
 
 class TestOpenFold3Configuration(unittest.TestCase):
 
