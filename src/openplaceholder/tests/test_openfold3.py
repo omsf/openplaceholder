@@ -11,7 +11,7 @@ def generate_fake_run_output(out_dir: Path):
 
     for lig_num in padded_range(20):
         lig = f"lig_{lig_num}"
-        for seed_num in padmap(padded, range(1, 6))ded_range(5):
+        for seed_num in padded_range(5):
             seed = f"seed_{seed_num}"
             for pose_num in padded_range(5):
                 basename = f"pose_{pose_num}.cif"
