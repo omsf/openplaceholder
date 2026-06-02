@@ -1,6 +1,10 @@
 [generator]
 implementation = "openplaceholder.impl.generator.openfold3:OpenFold3Generator"
-n_structures = 5
+n_diffusion_samples = 5
+# specify the seeds (deterministic), overrides generate_n_seeds
+seeds = [123, 456, 789]
+# generate n seeds for the run
+generate_n_seeds = 3
 sequence = "MGSPASDPTVFHKRYLKKIRDLGEGHFGKVSLYCYDPTNDGTGEMVAVKALKADAGPQHRSGWKQEIDILRTLYHEHIIKYKGCCEDAGAASLQLVMEYVPLGSLRDYLPRHSIGLAQLLLFAQQICEGMAYLHAQHYIHRNLAARNVLLDNDRLVKIGDFGLAKAVPEGHEYYRVREDGDSPVFWYAPECLKEYKFYYASDVWSFGVTLYELLTHCDSSQSPPTKFLELIGIAQGQMTVLRLTELLERGERLPRPDKCPAEVYHLMKNCWETEASFRPTFENLIPILKTVHEKYRHHHHHH"
 ligands = {'lig_ejm_31': 'CC(=O)Nc1cc(NC(=O)c2c(Cl)cccc2Cl)ccn1',
  'lig_ejm_42': 'CCC(=O)Nc1cc(NC(=O)c2c(Cl)cccc2Cl)ccn1',

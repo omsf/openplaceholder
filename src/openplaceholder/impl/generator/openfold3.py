@@ -1,5 +1,6 @@
 import base64
 import json
+import random
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,9 +18,10 @@ class OpenFold3GeneratorConfig:
     sequence: str
     ligands: dict[str, str]
     n_diffusion_samples: int
-    seeds: list[int]
+    generate_n_seeds: int | None
     output_directory: str | Path
     run_openfold_path: str | Path | None = None
+    seeds: list[int] | None = None
     clean_up: bool = True
 
 
@@ -99,9 +101,19 @@ model_update:
 experiment_settings:
   seeds:
 """
-        for seed in self._config.seeds:
+        for seed in self._get_seeds:
             content += f"    - {seed}\n"
         return content
+
+    def _get_seeds(self) -> list[str]:
+
+        if self._config.seeds:
+            return self._config.seeds
+        elif n_seeds := self._config.generate_n_seeds:
+            return [random.randint(0, 2**32 - 1) for _ in range(n_seeds)]
+        else:
+            # This should be caught during configuration creation
+            raise RuntimeError("Seed determination failed")
 
     def _run_openfold_subprocess(self) -> None:
         import subprocess
@@ -153,7 +165,16 @@ experiment_settings:
 
     def _build_subprocess_command(self) -> list[str]:
         exe = cast(str, self._config.run_openfold_path)
-        cmd = [exe,"predict",  "--query-json", "./queries.json", "--output-dir", "./output/", "--runner-yaml", "./runner.yml"]
+        cmd = [
+            exe,
+            "predict",
+            "--query-json",
+            "./queries.json",
+            "--output-dir",
+            "./output/",
+            "--runner-yaml",
+            "./runner.yml",
+        ]
         return cmd
 
     def _clean_up(self) -> None:
