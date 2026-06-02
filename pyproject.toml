@@ -26,8 +26,6 @@ dynamic = ["version"]
 test = [
     "black",
     "isort",
-    "pytest",
-    "pytest-cov",
     "mypy",
 ]
 dev = [
