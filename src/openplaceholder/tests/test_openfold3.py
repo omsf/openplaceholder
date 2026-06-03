@@ -9,18 +9,17 @@ from openplaceholder.impl.generator.openfold3 import (
 )
 
 
-def generate_fake_run_output(gen_dir: Path) -> None:
+def generate_fake_run_output(gen_dir: Path, n_seeds: int, n_diffusion_samples: int, ligands: dict[str, str]) -> None:
     import pathlib
     import random
 
     padded = lambda s: f"{s:0>2}"
     padded_range = lambda n: map(padded, range(1, n + 1))
 
-    for lig_num in padded_range(20):  # type: ignore
-        lig = f"lig_{lig_num}"
-        for seed_num in padded_range(5):  # type: ignore
+    for lig, _ in ligands.items():
+        for seed_num in padded_range(n_seeds):  # type: ignore
             seed = f"seed_{seed_num}"
-            for pose_num in padded_range(5):  # type: ignore
+            for pose_num in padded_range(n_diffusion_samples):  # type: ignore
                 basename = f"pose_{pose_num}.cif"
                 output_dir = gen_dir / "output" / lig / seed
                 output_dir.mkdir(exist_ok=True, parents=True)
@@ -43,10 +42,18 @@ class TestOpenFold3(unittest.TestCase):
             with patch.object(OpenFold3Generator, "_run_openfold_subprocess", autospec=True) as mock_run_subprocess:
                 mock_run_subprocess.return_value = None
                 gen = OpenFold3Generator(config)
-                generate_fake_run_output(Path(gen._config.generator_directory))
+
+                assert isinstance(gen._config.generate_n_seeds, int)
+
+                generate_fake_run_output(
+                    Path(gen._config.generator_directory),
+                    gen._config.generate_n_seeds,
+                    gen._config.n_diffusion_samples,
+                    gen._config.ligands,
+                )
                 artifacts = gen.run()
 
             assert len(artifacts) == 3
 
             for artifact in artifacts:
-                assert len(artifact.structures) == 25
+                assert len(artifact.structures) == gen._config.generate_n_seeds * gen._config.n_diffusion_samples
