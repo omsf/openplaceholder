@@ -7,6 +7,7 @@ from dataclasses import asdict, dataclass, fields
 from enum import StrEnum
 from pathlib import Path
 from typing import Self
+
 from MDAnalysis import Universe
 
 
