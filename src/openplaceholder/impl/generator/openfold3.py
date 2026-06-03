@@ -19,7 +19,7 @@ class OpenFold3GeneratorConfig:
     ligands: dict[str, str]
     n_diffusion_samples: int
     generate_n_seeds: int | None
-    output_directory: str | Path
+    generator_directory: str | Path
     run_openfold_path: str | Path | None = None
     seeds: list[int] | None = None
     clean_up: bool = True
@@ -49,14 +49,14 @@ class OpenFold3Generator(StructureGenerator):
         return generator_artifacts
 
     def _prepare_openfold_inputs(self) -> None:
-        output_dir = Path(self._config.output_directory)
-        output_dir.mkdir(exist_ok=True, parents=True)
+        gen_dir = Path(self._config.generator_directory)
+        gen_dir.mkdir(exist_ok=True, parents=True)
 
         query_map: dict[Any, Any] = self._query_map()
         runner_yaml_content: str = self._runner_yaml()
 
-        query_json_path = output_dir / "queries.json"
-        runner_path = output_dir / "runner.yml"
+        query_json_path = gen_dir / "queries.json"
+        runner_path = gen_dir / "runner.yml"
 
         query_json_path.write_text(json.dumps(query_map, indent=4))
         runner_path.write_text(runner_yaml_content)
@@ -101,12 +101,11 @@ model_update:
 experiment_settings:
   seeds:
 """
-        for seed in self._get_seeds:
+        for seed in self._get_seeds():
             content += f"    - {seed}\n"
         return content
 
     def _get_seeds(self) -> list[str]:
-
         if self._config.seeds:
             return self._config.seeds
         elif n_seeds := self._config.generate_n_seeds:
@@ -119,7 +118,7 @@ experiment_settings:
         import subprocess
 
         cmd = self._build_subprocess_command()
-        with subprocess.Popen(cmd, cwd=self._config.output_directory) as proc:
+        with subprocess.Popen(cmd, cwd=self._config.generator_directory) as proc:
             # TODO check output
             output = proc.wait()
 
@@ -130,13 +129,15 @@ experiment_settings:
 
         artifacts = []
 
-        output_dir = Path(self._config.output_directory)
+        output_dir = Path(self._config.generator_directory) / "output"
         sequence = self._config.sequence
         queries = self._query_map()["queries"]
 
         for query_name, query in queries.items():
             structures = []
             query_output = output_dir / query_name
+            if not (query_output := output_dir / query_name).exists():
+                raise RuntimeError(f"Expected output for ligand in {query_output}")
             ligand_smiles = None
             for chain in query["chains"]:
                 if ligand_smiles := chain.get("smiles"):
@@ -178,8 +179,8 @@ experiment_settings:
         return cmd
 
     def _clean_up(self) -> None:
-        output_dir = Path(self._config.output_directory)
-        shutil.rmtree(output_dir)
+        generator_dir = Path(self._config.generator_directory)
+        shutil.rmtree(generator_dir)
 
     def validate_input(self) -> None:
         raise NotImplementedError
