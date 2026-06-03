@@ -7,6 +7,7 @@ from dataclasses import asdict, dataclass, fields
 from enum import StrEnum
 from pathlib import Path
 from typing import Self
+from MDAnalysis import Universe
 
 
 class StructureFormat(StrEnum):
@@ -52,6 +53,9 @@ class Structure:
         return hashlib.sha256("\x00".join(parts).encode()).hexdigest()
 
     def same_complex(self, other: Self) -> bool:
+        raise NotImplementedError
+
+    def to_mda(self) -> "Universe":
         raise NotImplementedError
 
 
