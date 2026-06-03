@@ -105,7 +105,7 @@ experiment_settings:
             content += f"    - {seed}\n"
         return content
 
-    def _get_seeds(self) -> list[str]:
+    def _get_seeds(self) -> list[int]:
         if self._config.seeds:
             return self._config.seeds
         elif n_seeds := self._config.generate_n_seeds:
