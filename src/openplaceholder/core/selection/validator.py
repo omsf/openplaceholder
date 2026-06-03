@@ -5,8 +5,12 @@ from openplaceholder.core.structure.structure import Structure
 
 class Validator(ABC):
 
-    def validate(self, structures: list[Structure]) -> list[Structure]:
-        return list(filter(self._validate_structure, structures))
+    def validate_structures(self, structures: list[Structure]) -> list[Structure]:
+        _structures = []
+        for structure in structures:
+            if self._validate_structure(structure):
+                _structures.append(structure)
+        return _structures
 
     @abstractmethod
     def _validate_structure(self, structure: Structure) -> bool:
