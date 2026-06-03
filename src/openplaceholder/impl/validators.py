@@ -36,8 +36,8 @@ class ClashValidator(Validator):
     def __init__(self, config: ClashValidatorConfig):
         self._config = config
 
-    def validate(self, structures: list[Structure]) -> list[Structure]:
-        return [s for s in structures if self._count_clashes(s) <= self._config.max_clashes]
+    def _validate_structure(self, structure: Structure) -> bool:
+        return self._count_clashes(structure) <= self._config.max_clashes
 
     def _count_clashes(self, structure: Structure) -> int:
         ligand = f"resname {structure.ligand_name}"
