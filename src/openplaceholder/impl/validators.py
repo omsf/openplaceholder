@@ -40,7 +40,7 @@ class ClashValidator(Validator):
         return [s for s in structures if self._count_clashes(s) <= self._config.max_clashes]
 
     def _count_clashes(self, structure: Structure) -> int:
-        ligand = f"resname {structure.ligand_resname}"
+        ligand = f"resname {structure.ligand_name}"
         site = structure.to_mda().select_atoms(f"({ligand}) or (around {self._config.site_radius} {ligand})")
         radii = [vdwradii.get(element.upper(), 1.5) for element in site.elements]
         bonded = {tuple(bond) for bond in site.bonds.to_indices()}
