@@ -77,7 +77,6 @@ class OpenFold3Generator(StructureGenerator):
         return queries
 
     def _runner_yaml(self) -> str:
-        # TODO add diffusion samples number
         content = """
 msa_computation_settings:
   msa_output_directory: ./msas/
@@ -175,6 +174,8 @@ experiment_settings:
             "./output/",
             "--runner-yaml",
             "./runner.yml",
+            "--num-diffusion-samples",
+            str(self._config.n_diffusion_samples),
         ]
         return cmd
 
