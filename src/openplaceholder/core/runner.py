@@ -26,7 +26,7 @@ def run_serial(pipeline: Pipeline) -> AlchemicalNetwork:
         structures: list[Structure] = artifact.structures
 
         for validator in pipeline.validators:
-            structures = validator.validate(structures)
+            structures = validator.validate_structures(structures)
 
         if pipeline.filters is not None:
             for filt in pipeline.filters:
