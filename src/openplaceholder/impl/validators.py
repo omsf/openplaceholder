@@ -17,7 +17,11 @@ class PosebustersValidatorConfig:
 
 
 class PosebustersValidator(Validator):
-    """Reject poses that fail more than `max_failures` of the configured PoseBusters checks."""
+    """Reject poses that fail more than `max_failures` of the configured PoseBusters checks.
+    
+    Passing generated molecules conformations will have reasonable geometries,
+    have standard bond lengths and angles and no intramolecular steric clashes.
+    """
 
     def __init__(self, config: PosebustersValidatorConfig):
         self._config = config
