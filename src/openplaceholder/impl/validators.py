@@ -18,7 +18,7 @@ class PosebustersValidatorConfig:
 
 class PosebustersValidator(Validator):
     """Reject poses that fail more than `max_failures` of the configured PoseBusters checks.
-    
+
     Passing generated molecules conformations will have reasonable geometries,
     have standard bond lengths and angles and no intramolecular steric clashes.
     """
@@ -33,7 +33,7 @@ class PosebustersValidator(Validator):
 
     def results(self, structure: Structure) -> dict[str, bool]:
         ligand = structure.to_mda().select_atoms(f"resname {structure.ligand_name}").convert_to("RDKIT")
-        report = self._buster.bust(mol_pred=ligand) # can use this later on for granular validation
+        report = self._buster.bust(mol_pred=ligand)  # can use this later on for granular validation
         return {check: bool(passed) for check, passed in report.iloc[0].items()}
 
 
@@ -49,7 +49,7 @@ class ClashValidatorConfig:
 
 class ClashValidator(Validator):
     """Reject poses with too many steric clashes between non-bonded atoms in the binding site.
-    
+
     We do this ourselves rather than with `PosebustersValidator` to allow more fine controls.
     """
 
