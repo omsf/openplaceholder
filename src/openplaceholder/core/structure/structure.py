@@ -59,6 +59,10 @@ class Structure:
     def to_mda(self) -> "Universe":
         raise NotImplementedError
 
+    @property
+    def aa_sequence(self) -> str:
+        raise NotImplementedError
+
 
 @dataclass(frozen=True, eq=True)
 class StructureSet:

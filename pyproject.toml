@@ -21,6 +21,7 @@ dependencies = [
     "gufe",
     "MDAnalysis",
     "posebusters",
+    "biopython",
 ]
 dynamic = ["version"]
 

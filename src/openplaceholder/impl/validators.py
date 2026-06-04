@@ -72,3 +72,25 @@ class ClashValidator(Validator):
             if (indices[i], indices[j]) not in bonded and distance < tolerance * (radii[i] + radii[j]):
                 clashes += 1
         return clashes
+
+
+@dataclass(frozen=True, eq=True)
+class SequenceValidatorConfig:
+    # maximum number of residues allowed to differ from the requested sequence
+    max_mismatches: int = 0
+
+
+class SequenceValidator(Validator):
+    """Reject poses whose modelled protein sequence drifts from the requested amino-acid sequence."""
+
+    def __init__(self, config: SequenceValidatorConfig):
+        self._config = config
+
+    def _validate_structure(self, structure: Structure) -> bool:
+        return self._count_mismatches(structure) <= self._config.max_mismatches
+
+    def _count_mismatches(self, structure: Structure) -> int:
+        original = structure.aa_sequence
+        modelled = structure.to_mda().select_atoms("protein").residues.sequence(format="string")
+        substitutions = sum(1 for expected, actual in zip(original, modelled) if expected != actual)
+        return substitutions + abs(len(original) - len(modelled))
