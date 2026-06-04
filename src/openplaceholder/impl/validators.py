@@ -27,6 +27,7 @@ class ClashValidatorConfig:
     clash_tolerance: float = 0.63
     # only atoms within this distance (angstrom) of the ligand are considered the binding site
     site_radius: float = 10.0
+    # the maximum number of allowed clashes before a pose is considered flawed
     max_clashes: int = 0
 
 
