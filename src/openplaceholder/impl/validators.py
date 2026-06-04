@@ -48,7 +48,10 @@ class ClashValidatorConfig:
 
 
 class ClashValidator(Validator):
-    """Reject poses with too many steric clashes between non-bonded atoms in the binding site."""
+    """Reject poses with too many steric clashes between non-bonded atoms in the binding site.
+    
+    We do this ourselves rather than with `PosebustersValidator` to allow more fine controls.
+    """
 
     def __init__(self, config: ClashValidatorConfig):
         self._config = config
