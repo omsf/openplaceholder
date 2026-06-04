@@ -29,7 +29,7 @@ class PosebustersValidator(Validator):
 
     def results(self, structure: Structure) -> dict[str, bool]:
         ligand = structure.to_mda().select_atoms(f"resname {structure.ligand_name}").convert_to("RDKIT")
-        report = self._buster.bust(mol_pred=ligand)
+        report = self._buster.bust(mol_pred=ligand) # can use this later on for granular validation
         return {check: bool(passed) for check, passed in report.iloc[0].items()}
 
 
