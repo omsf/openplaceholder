@@ -9,7 +9,8 @@ from openplaceholder.core.structure.structure import (
     StructureFormat,
     StructureSet,
 )
-from openplaceholder.tests.helpers import make_structures
+from openplaceholder.tests.datafiles import TYK2_LIG_PDB
+from openplaceholder.tests.helpers import make_structures, read_gzip_file
 
 BENZENE_SMILES = "C1=CC=CC=C1"
 PHENOL_SMILES = "C1=CC=C(C=C1)O"
@@ -78,6 +79,21 @@ class TestStructure(TestCase):
     @skip("")
     def test_same_complex(self) -> None:
         raise NotImplementedError
+
+    def test_to_mda(self) -> None:
+
+        content = read_gzip_file(TYK2_LIG_PDB)
+
+        a = Structure(
+            "TVFHKRYLKKIRDLGEGHFGKVSLYCYDPTNDGTGEMVAVKALKADCGPQHRSGWKQEIDILRTLYHEHIIKYKGCCEDQGEKSLQLVMEYVPLGSLRDYLPRHSIGLAQLLLFAQQICEGMAYLHAQHYIHRDLAARNVLLDNDRLVKIGDFGLAKAVPEGHEYYRVREDGDSPVFWYAPECLKEYKFYYASDVWSFGVTLYELLTHCDSSQSPPTKFLELIGIAQGQMTVLRLTELLERGERLPRPDKCPCEVYHLMKNCWETEASFRPTFENLIPILKTVHEKYQ",
+            "[H]c1nc(N([H])C(=O)O[C@@]([H])([H])[H])c([H])c(N([H])C(=O)c2c(Cl)c([H])c([H])c([H])c2Cl)c1[H]",
+            "lig_ejm_55",
+            "pdb",
+            base64.b64encode(content).decode(),
+        )
+        u = a.to_mda_universe()
+
+        assert len(u.select_atoms("protein")) > len(u.select_atoms("not protein")) > 0
 
 
 class TestStructureSet(TestCase):

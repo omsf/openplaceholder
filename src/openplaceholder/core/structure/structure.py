@@ -2,13 +2,19 @@
 
 import base64
 import hashlib
+import io
 import json
 from dataclasses import asdict, dataclass, fields
 from enum import StrEnum
 from pathlib import Path
 from typing import Self
 
+import MDAnalysis as mda
 from MDAnalysis import Universe
+
+
+class UnsupportedFormatError(Exception):
+    pass
 
 
 class StructureFormat(StrEnum):
@@ -56,8 +62,27 @@ class Structure:
     def same_complex(self, other: Self) -> bool:
         raise NotImplementedError
 
-    def to_mda(self) -> "Universe":
-        raise NotImplementedError
+    def to_mda_universe(self) -> Universe:
+        match self.structure_format:
+            case StructureFormat.PDB:
+                stream = io.StringIO(self.structure.decode("utf-8"))
+                topology_format = "pdb"
+            case _:
+                raise UnsupportedFormatError(
+                    f"{self.structure_format} is not supported by MDAnalysis ({mda.__version__})."
+                )
+        return mda.Universe(stream, topology_format=topology_format)
+
+    def write_json(self, file_path) -> None:
+        file_path = Path(file_path)
+        _dct = asdict(self)
+        file_path.write_text(json.dumps(_dct))
+
+    @classmethod
+    def read_json(cls, file_path) -> Self:
+        file_path = Path(file_path)
+        content = file_path.read_text()
+        return cls(**json.loads(content))
 
 
 @dataclass(frozen=True, eq=True)
