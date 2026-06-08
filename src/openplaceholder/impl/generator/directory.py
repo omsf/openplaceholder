@@ -11,7 +11,7 @@ from openplaceholder.core.generation.generator import (
     StructureGenerator,
     StructureGeneratorArtifact,
 )
-from openplaceholder.core.structure.structure import Structure, StructureFormat
+from openplaceholder.core.structure import Structure, StructureFormat
 
 
 @dataclass(frozen=True, eq=True)

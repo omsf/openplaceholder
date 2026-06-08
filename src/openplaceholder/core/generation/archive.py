@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from openplaceholder.core.generation.generator import StructureGeneratorArtifact
-from openplaceholder.core.structure.structure import Structure, StructureFormat
+from openplaceholder.core.structure import Structure, StructureFormat
 
 
 class ArtifactArchive(ABC):
