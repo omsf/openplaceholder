@@ -43,7 +43,7 @@ class DirectoryArchive(ArtifactArchive):
             (artifact_dir / "artifact.json").write_text(json.dumps(meta))
             for i, structure in enumerate(artifact.structures):
                 suffix = StructureFormat(structure.structure_format).to_suffix()
-                (artifact_dir / f"pose_{i}{suffix}").write_bytes(structure.structure)
+                (artifact_dir / f"pose_{i}{suffix}").write_bytes(structure.decode_structure_data())
 
     def read(self) -> list[StructureGeneratorArtifact]:
         root = Path(self._config.directory)
