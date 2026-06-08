@@ -50,11 +50,6 @@ class Structure:
     def __post_init__(self) -> None:
         object.__setattr__(self, "structure_format", StructureFormat(self.structure_format.upper()).value)
 
-    @property
-    def structure(self) -> bytes:
-        return base64.b64decode(self.structure_data.encode())
-
-    @property
     def key(self) -> str:
         parts = [getattr(self, f.name) for f in fields(self)]
         return hashlib.sha256("\x00".join(parts).encode()).hexdigest()
@@ -62,10 +57,13 @@ class Structure:
     def same_complex(self, other: Self) -> bool:
         raise NotImplementedError
 
+    def decode_structure_data(self) -> bytes:
+        return base64.b64decode(self.structure_data.encode("utf-8"))
+
     def to_mda_universe(self) -> Universe:
         match self.structure_format:
             case StructureFormat.PDB:
-                stream = io.StringIO(self.structure.decode("utf-8"))
+                stream = io.StringIO(self.structure_data.decode("utf-8"))
                 topology_format = "pdb"
             case _:
                 raise UnsupportedFormatError(
@@ -90,7 +88,7 @@ class StructureSet:
     structures: list[Structure]
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "structures", sorted(self.structures, key=lambda s: s.key))
+        object.__setattr__(self, "structures", sorted(self.structures, key=lambda s: s.key()))
 
     @classmethod
     def from_structures(cls, structures: list[Structure]) -> Self:

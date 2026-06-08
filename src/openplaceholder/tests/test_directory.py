@@ -31,4 +31,4 @@ class TestDirectoryGenerator(TestCase):
             assert loaded[0].sequence == artifact.sequence
             assert loaded[0].ligand_smiles == artifact.ligand_smiles
             assert loaded[0].ligand_name == artifact.ligand_name
-            assert loaded[0].structures == artifact.structures
+            assert loaded[0].structures == artifact.structures, (loaded[0].structures, artifact.structures)

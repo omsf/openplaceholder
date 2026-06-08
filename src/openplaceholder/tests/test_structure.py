@@ -64,35 +64,33 @@ class TestStructure(TestCase):
         data = b"fake data"
         encoded = base64.b64encode(data).decode()
         s = Structure("SEQ", BENZENE_SMILES, "lig", "mmcif", encoded)
-        assert s.structure == data
+        decoded = s.decode_structure_data()
+        assert decoded == data, (data, decoded)
 
     def test_key_equal_structures(self) -> None:
         a = Structure("SEQ", BENZENE_SMILES, "lig", "mmcif", "data")
         b = Structure("SEQ", BENZENE_SMILES, "lig", "mmcif", "data")
-        assert a.key == b.key
+        assert a.key() == b.key()
 
     def test_key_different_structures(self) -> None:
         a = Structure("SEQ", BENZENE_SMILES, "lig", "mmcif", "data")
         b = Structure("SEQ", BENZENE_SMILES, "lig", "mmcif", "different_data")
-        assert a.key != b.key
+        assert a.key() != b.key()
 
     @skip("")
     def test_same_complex(self) -> None:
         raise NotImplementedError
 
     def test_to_mda(self) -> None:
-
         content = read_gzip_file(TYK2_LIG_PDB)
-
         a = Structure(
             "TVFHKRYLKKIRDLGEGHFGKVSLYCYDPTNDGTGEMVAVKALKADCGPQHRSGWKQEIDILRTLYHEHIIKYKGCCEDQGEKSLQLVMEYVPLGSLRDYLPRHSIGLAQLLLFAQQICEGMAYLHAQHYIHRDLAARNVLLDNDRLVKIGDFGLAKAVPEGHEYYRVREDGDSPVFWYAPECLKEYKFYYASDVWSFGVTLYELLTHCDSSQSPPTKFLELIGIAQGQMTVLRLTELLERGERLPRPDKCPCEVYHLMKNCWETEASFRPTFENLIPILKTVHEKYQ",
             "[H]c1nc(N([H])C(=O)O[C@@]([H])([H])[H])c([H])c(N([H])C(=O)c2c(Cl)c([H])c([H])c([H])c2Cl)c1[H]",
             "lig_ejm_55",
             "pdb",
-            base64.b64encode(content).decode(),
+            content,
         )
         u = a.to_mda_universe()
-
         assert len(u.select_atoms("protein")) > len(u.select_atoms("not protein")) > 0
 
 
