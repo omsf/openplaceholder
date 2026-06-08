@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from openplaceholder.core.generation.generator import StructureGeneratorArtifact
-from openplaceholder.core.structure.structure import Structure, StructureFormat
+from openplaceholder.core.structure import Structure, StructureFormat
 
 
 class ArtifactArchive(ABC):
@@ -43,7 +43,7 @@ class DirectoryArchive(ArtifactArchive):
             (artifact_dir / "artifact.json").write_text(json.dumps(meta))
             for i, structure in enumerate(artifact.structures):
                 suffix = StructureFormat(structure.structure_format).to_suffix()
-                (artifact_dir / f"pose_{i}{suffix}").write_bytes(structure.structure)
+                (artifact_dir / f"pose_{i}{suffix}").write_bytes(structure.decode_structure_data())
 
     def read(self) -> list[StructureGeneratorArtifact]:
         root = Path(self._config.directory)

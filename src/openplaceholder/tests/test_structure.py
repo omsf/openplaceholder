@@ -4,12 +4,13 @@ import tempfile
 from pathlib import Path
 from unittest import TestCase, skip
 
-from openplaceholder.core.structure.structure import (
+from openplaceholder.core.structure import (
     Structure,
     StructureFormat,
     StructureSet,
 )
-from openplaceholder.tests.helpers import make_structures
+from openplaceholder.tests.datafiles import TYK2_LIG_PDB
+from openplaceholder.tests.helpers import make_structures, read_gzip_file
 
 BENZENE_SMILES = "C1=CC=CC=C1"
 PHENOL_SMILES = "C1=CC=C(C=C1)O"
@@ -63,21 +64,35 @@ class TestStructure(TestCase):
         data = b"fake data"
         encoded = base64.b64encode(data).decode()
         s = Structure("SEQ", BENZENE_SMILES, "lig", "mmcif", encoded)
-        assert s.structure == data
+        decoded = s.decode_structure_data()
+        assert decoded == data, (data, decoded)
 
     def test_key_equal_structures(self) -> None:
         a = Structure("SEQ", BENZENE_SMILES, "lig", "mmcif", "data")
         b = Structure("SEQ", BENZENE_SMILES, "lig", "mmcif", "data")
-        assert a.key == b.key
+        assert a.key() == b.key()
 
     def test_key_different_structures(self) -> None:
         a = Structure("SEQ", BENZENE_SMILES, "lig", "mmcif", "data")
         b = Structure("SEQ", BENZENE_SMILES, "lig", "mmcif", "different_data")
-        assert a.key != b.key
+        assert a.key() != b.key()
 
     @skip("")
     def test_same_complex(self) -> None:
         raise NotImplementedError
+
+    def test_to_mda_universe(self) -> None:
+        test_file = str(TYK2_LIG_PDB)
+        content = base64.b64encode(read_gzip_file(test_file)).decode()
+        a = Structure(
+            "TVFHKRYLKKIRDLGEGHFGKVSLYCYDPTNDGTGEMVAVKALKADCGPQHRSGWKQEIDILRTLYHEHIIKYKGCCEDQGEKSLQLVMEYVPLGSLRDYLPRHSIGLAQLLLFAQQICEGMAYLHAQHYIHRDLAARNVLLDNDRLVKIGDFGLAKAVPEGHEYYRVREDGDSPVFWYAPECLKEYKFYYASDVWSFGVTLYELLTHCDSSQSPPTKFLELIGIAQGQMTVLRLTELLERGERLPRPDKCPCEVYHLMKNCWETEASFRPTFENLIPILKTVHEKYQ",
+            "[H]c1nc(N([H])C(=O)O[C@@]([H])([H])[H])c([H])c(N([H])C(=O)c2c(Cl)c([H])c([H])c([H])c2Cl)c1[H]",
+            "lig_ejm_55",
+            "pdb",
+            content,
+        )
+        u = a.to_mda_universe()
+        assert len(u.select_atoms("protein")) > len(u.select_atoms("not protein")) > 0
 
 
 class TestStructureSet(TestCase):
