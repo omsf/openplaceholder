@@ -31,26 +31,19 @@ class StereoValidator(Validator):
     def __init__(self, config: StereoValidatorConfig):
         self._config = config
 
-    def validate(self, structures: list[Structure]) -> list[Structure]:
+    def _validate_structure(self, structure: Structure) -> bool:
+        original_smiles = structure.smiles
+        derived_smiles = self._determine_smiles_from_structure(structure)
+        return self._compatible(original_smiles, derived_smiles)
 
-        passed = []
-        failed = []
-        for structure in structures:
-
-            original_smiles = structure.smiles
-            derived_smiles = self._determine_smiles_from_bytes(structure.structure, structure.structure_format)
-
-            if self._compatible(original_smiles, derived_smiles):
-                passed.append(structure)
-            else:
-                failed.append(structure)
-
-        # NOTE: I plan to extend this to also include failures in the output
-        return passed
-
-    def _determine_smiles_from_bytes(self, structure_bytes, structure_format):
-        # use whatever reader to take the decoded file contents according to the format specified
+    def _determine_smiles_from_structure(self, structure: Structure) -> str:
+        u = structure.to_mda_universe()
         raise NotImplementedError
+
+    @staticmethod
+    def _compatible(smiles_a: str, smiles_b: str) -> bool:
+        raise NotImplementedError
+
 
 @dataclass(frozen=True, eq=True)
 class ClashValidatorConfig:
