@@ -4,7 +4,7 @@ import tempfile
 from pathlib import Path
 from unittest import TestCase, skip
 
-from openplaceholder.core.structure.structure import (
+from openplaceholder.core.structure import (
     Structure,
     StructureFormat,
     StructureSet,

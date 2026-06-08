@@ -56,7 +56,7 @@ class Structure:
     def same_complex(self, other: Self) -> bool:
         raise NotImplementedError
 
-    def to_mda(self) -> "Universe":
+    def to_mda(self) -> Universe:
         raise NotImplementedError
 
 
