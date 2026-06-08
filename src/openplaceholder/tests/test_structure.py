@@ -81,8 +81,9 @@ class TestStructure(TestCase):
     def test_same_complex(self) -> None:
         raise NotImplementedError
 
-    def test_to_mda(self) -> None:
-        content = read_gzip_file(TYK2_LIG_PDB)
+    def test_to_mda_universe(self) -> None:
+        test_file = str(TYK2_LIG_PDB)
+        content = base64.b64encode(read_gzip_file(test_file)).decode()
         a = Structure(
             "TVFHKRYLKKIRDLGEGHFGKVSLYCYDPTNDGTGEMVAVKALKADCGPQHRSGWKQEIDILRTLYHEHIIKYKGCCEDQGEKSLQLVMEYVPLGSLRDYLPRHSIGLAQLLLFAQQICEGMAYLHAQHYIHRDLAARNVLLDNDRLVKIGDFGLAKAVPEGHEYYRVREDGDSPVFWYAPECLKEYKFYYASDVWSFGVTLYELLTHCDSSQSPPTKFLELIGIAQGQMTVLRLTELLERGERLPRPDKCPCEVYHLMKNCWETEASFRPTFENLIPILKTVHEKYQ",
             "[H]c1nc(N([H])C(=O)O[C@@]([H])([H])[H])c([H])c(N([H])C(=O)c2c(Cl)c([H])c([H])c([H])c2Cl)c1[H]",

@@ -63,7 +63,7 @@ class Structure:
     def to_mda_universe(self) -> Universe:
         match self.structure_format:
             case StructureFormat.PDB:
-                stream = io.StringIO(self.structure_data.decode("utf-8"))
+                stream = io.StringIO(self.decode_structure_data().decode())
                 topology_format = "pdb"
             case _:
                 raise UnsupportedFormatError(
@@ -71,13 +71,13 @@ class Structure:
                 )
         return mda.Universe(stream, topology_format=topology_format)
 
-    def write_json(self, file_path) -> None:
+    def write_json(self, file_path: str | Path) -> None:
         file_path = Path(file_path)
         _dct = asdict(self)
         file_path.write_text(json.dumps(_dct))
 
     @classmethod
-    def read_json(cls, file_path) -> Self:
+    def read_json(cls, file_path: str | Path) -> Self:
         file_path = Path(file_path)
         content = file_path.read_text()
         return cls(**json.loads(content))
