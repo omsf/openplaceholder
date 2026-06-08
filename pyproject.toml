@@ -19,6 +19,7 @@ classifiers = [
 requires-python = ">=3.12"
 dependencies = [
     "gufe",
+    "MDAnalysis",
 ]
 dynamic = ["version"]
 
@@ -29,7 +30,8 @@ test = [
     "mypy",
 ]
 dev = [
-    "openplaceholder[test]"
+    "openplaceholder[test]",
+    "pdbpp"
 ]
 docs = [
      "sphinx"
@@ -41,6 +43,9 @@ requires = [
     "versioningit",
 ]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools.package-data]
+openplaceholder = ["./src/openplaceholder/tests/data/structures/*"]
 
 [tool.black]
 line-length = 120

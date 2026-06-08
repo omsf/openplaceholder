@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Self
 
-from openplaceholder.core.structure.structure import Structure, StructureSet
+from openplaceholder.core.structure import Structure, StructureSet
 
 
 @dataclass(frozen=True, eq=True)

@@ -1,8 +1,10 @@
 import base64
 import dataclasses
+import gzip
 import random
+from pathlib import Path
 
-from openplaceholder.core.structure.structure import Structure, StructureFormat
+from openplaceholder.core.structure import Structure, StructureFormat
 
 DEFAULT_SEQUENCE = "MGSPASDPTVFHKRYLKKIRDLGEGHFGKVSLYCYDPTNDGTGEMVAVKALKADAGPQHRSGWKQEIDILRTLYHEHIIKYKGCCEDAGAASLQLVMEYVPLGSLRDYLPRHSIGLAQLLLFAQQICEGMAYLHAQHYIHRNLAARNVLLDNDRLVKIGDFGLAKAVPEGHEYYRVREDGDSPVFWYAPECLKEYKFYYASDVWSFGVTLYELLTHCDSSQSPPTKFLELIGIAQGQMTVLRLTELLERGERLPRPDKCPAEVYHLMKNCWETEASFRPTFENLIPILKTVHEKYRHHHHHH"
 DEFAULT_SMILES = "C1=CC=CC=C1"
@@ -28,3 +30,12 @@ def make_structures(
         dataclasses.replace(template, structure_data=base64.b64encode(random.randbytes(8)).decode())
         for _ in range(n_structures)
     ]
+
+
+def read_gzip_file(file_path: str | Path) -> bytes:
+    file_path = Path(file_path)
+
+    with gzip.open(file_path, "r") as gz:
+        content = gz.read()
+
+    return content
