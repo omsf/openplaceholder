@@ -72,7 +72,7 @@ class SequenceValidator(Validator):
         self._config = config
 
     def _validate_structure(self, structure: Structure) -> bool:
-        original = structure.aa_sequence
+        original = structure.sequence
         modelled = structure.to_mda_universe().select_atoms("protein").residues.sequence(format="string")
         if len(original) != len(modelled):
             return False

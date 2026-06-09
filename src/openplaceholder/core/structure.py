@@ -82,10 +82,6 @@ class Structure:
         content = file_path.read_text()
         return cls(**json.loads(content))
 
-    @property
-    def aa_sequence(self) -> str:
-        raise NotImplementedError
-
 
 @dataclass(frozen=True, eq=True)
 class StructureSet:
