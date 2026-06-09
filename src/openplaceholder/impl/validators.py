@@ -92,5 +92,9 @@ class SequenceValidator(Validator):
     def _count_mismatches(self, structure: Structure) -> int:
         original = structure.aa_sequence
         modelled = structure.to_mda_universe().select_atoms("protein").residues.sequence(format="string")
-        substitutions = sum(1 for expected, actual in zip(original, modelled) if expected != actual)
+        substitutions = 0
+        for expected, actual in zip(original, modelled):
+            if expected != actual:
+                substitutions += 1
+
         return substitutions + abs(len(original) - len(modelled))
