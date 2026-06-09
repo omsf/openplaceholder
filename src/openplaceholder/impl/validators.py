@@ -87,14 +87,15 @@ class SequenceValidator(Validator):
         self._config = config
 
     def _validate_structure(self, structure: Structure) -> bool:
-        return self._count_mismatches(structure) <= self._config.max_mismatches
-
-    def _count_mismatches(self, structure: Structure) -> int:
         original = structure.aa_sequence
         modelled = structure.to_mda_universe().select_atoms("protein").residues.sequence(format="string")
+        if len(original) != len(modelled):
+            return False
+        return self._count_mismatches(original, modelled) <= self._config.max_mismatches
+
+    def _count_mismatches(self, original: str, modelled: str) -> int:
         substitutions = 0
         for expected, actual in zip(original, modelled):
             if expected != actual:
                 substitutions += 1
-
-        return substitutions + abs(len(original) - len(modelled))
+        return substitutions
