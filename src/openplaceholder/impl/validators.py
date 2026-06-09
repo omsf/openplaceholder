@@ -10,31 +10,16 @@ from openplaceholder.core.structure.structure import Structure
 
 @dataclass(frozen=True, eq=True)
 class PosebustersValidatorConfig:
-    # PoseBusters preset to run: "mol" (ligand validity), "dock", "gen", ...
-    preset: str = "mol"
-    # maximum number of failed PoseBusters checks tolerated before a pose is rejected
-    max_failures: int = 0
+    pass
 
 
 class PosebustersValidator(Validator):
-    """Reject poses that fail more than `max_failures` of the configured PoseBusters checks.
-
-    Passing generated molecules conformations will have reasonable geometries,
-    have standard bond lengths and angles and no intramolecular steric clashes.
-    """
 
     def __init__(self, config: PosebustersValidatorConfig):
         self._config = config
-        self._buster = PoseBusters(config=config.preset)
 
-    def _validate_structure(self, structure: Structure) -> bool:
-        failures = sum(1 for passed in self.results(structure).values() if not passed)
-        return failures <= self._config.max_failures
-
-    def results(self, structure: Structure) -> dict[str, bool]:
-        ligand = structure.to_mda().select_atoms(f"resname {structure.ligand_name}").convert_to("RDKIT")
-        report = self._buster.bust(mol_pred=ligand)  # can use this later on for granular validation
-        return {check: bool(passed) for check, passed in report.iloc[0].items()}
+    def validate(self, structures: list[Structure]) -> list[Structure]:
+        raise NotImplementedError
 
 
 @dataclass(frozen=True, eq=True)
