@@ -57,19 +57,26 @@ class StereoValidator(Validator):
 
     def _cofolded_mol(self, structure: Structure) -> Chem.Mol:
         ligand = structure.to_mda_universe().select_atoms(f"resname {structure.ligand_name}")
-        mol = ligand.convert_to("RDKIT")
+        # cofolded ligands carry no explicit hydrogens, so force the conversion past that check and
+        # recover the heavy-atom skeleton; bond orders and hydrogens come from the template below.
+        mol = ligand.convert_to("RDKIT", force=True)
         template = Chem.MolFromSmiles(structure.ligand_smiles)
         mol = AllChem.AssignBondOrdersFromTemplate(template, mol)
+        # the forced conversion left atoms flagged as radicals with implicit hydrogens suppressed;
+        # clear that so sanitisation fills valences (and hydrogen counts) from the assigned bond orders.
+        editable = Chem.RWMol(mol)
+        for atom in editable.GetAtoms():
+            atom.SetNoImplicit(False)
+            atom.SetNumExplicitHs(0)
+            atom.SetNumRadicalElectrons(0)
+        mol = editable.GetMol()
+        Chem.SanitizeMol(mol)
         Chem.AssignStereochemistryFrom3D(mol)
         return mol
 
-    def _same_inchi(self, reference: Chem.Mol, cofolded: Chem.Mol) -> bool:
-        return inchi.MolToInchi(reference) == inchi.MolToInchi(cofolded)
-
     @staticmethod
-    def _stereo_block(mol: Chem.Mol) -> str:
-        # the InChIKey's second block encodes the stereo, charge and isotope layers
-        return inchi.MolToInchiKey(mol).split("-")[1]
+    def _same_inchi(reference: Chem.Mol, cofolded: Chem.Mol) -> bool:
+        return inchi.MolToInchi(reference) == inchi.MolToInchi(cofolded)
 
     @staticmethod
     def _same_smiles(reference: Chem.Mol, cofolded: Chem.Mol) -> bool:
