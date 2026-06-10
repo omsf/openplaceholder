@@ -2,6 +2,8 @@ from dataclasses import dataclass
 
 from MDAnalysis.guesser.tables import vdwradii
 from MDAnalysis.lib.distances import self_capped_distance
+from rdkit import Chem
+from rdkit.Chem import AllChem, inchi
 
 from openplaceholder.core.selection.validator import Validator
 from openplaceholder.core.structure.structure import Structure
@@ -23,26 +25,55 @@ class PosebustersValidator(Validator):
 
 @dataclass(frozen=True, eq=True)
 class StereoValidatorConfig:
-    pass
+    # require the standard InChI of the cofolded ligand to match the requested ligand
+    require_inchi_match: bool = True
+    # require the canonical isomeric SMILES of the cofolded ligand to match the requested ligand
+    require_smiles_match: bool = True
 
 
 class StereoValidator(Validator):
+    """Reject poses whose cofolded ligand stereochemistry drifts from the requested ligand.
+
+    The requested ligand is taken from its SMILES; the cofolded ligand has its bond orders
+    assigned from that template (so connectivity is shared) and its stereochemistry perceived
+    independently from the 3D coordinates. The two are then compared as canonical InChI and/or
+    canonical isomeric SMILES. InChI is a toolkit-independent, tautomer-normalised reference,
+    while SMILES is stricter and also captures enhanced stereochemistry InChI cannot represent;
+    requiring both to agree guards against the blind spots of either representation.
+    """
 
     def __init__(self, config: StereoValidatorConfig):
         self._config = config
 
     def _validate_structure(self, structure: Structure) -> bool:
-        original_smiles = structure.smiles
-        derived_smiles = self._determine_smiles_from_structure(structure)
-        return self._compatible(original_smiles, derived_smiles)
+        reference = Chem.MolFromSmiles(structure.ligand_smiles)
+        cofolded = self._cofolded_mol(structure)
+        checks = []
+        if self._config.require_inchi_match:
+            checks.append(self._same_inchi(reference, cofolded))
+        if self._config.require_smiles_match:
+            checks.append(self._same_smiles(reference, cofolded))
+        return all(checks)
 
-    def _determine_smiles_from_structure(self, structure: Structure) -> str:
-        u = structure.to_mda_universe()
-        raise NotImplementedError
+    def _cofolded_mol(self, structure: Structure) -> Chem.Mol:
+        ligand = structure.to_mda_universe().select_atoms(f"resname {structure.ligand_name}")
+        mol = ligand.convert_to("RDKIT")
+        template = Chem.MolFromSmiles(structure.ligand_smiles)
+        mol = AllChem.AssignBondOrdersFromTemplate(template, mol)
+        Chem.AssignStereochemistryFrom3D(mol)
+        return mol
+
+    def _same_inchi(self, reference: Chem.Mol, cofolded: Chem.Mol) -> bool:
+        return inchi.MolToInchi(reference) == inchi.MolToInchi(cofolded)
 
     @staticmethod
-    def _compatible(smiles_a: str, smiles_b: str) -> bool:
-        raise NotImplementedError
+    def _stereo_block(mol: Chem.Mol) -> str:
+        # the InChIKey's second block encodes the stereo, charge and isotope layers
+        return inchi.MolToInchiKey(mol).split("-")[1]
+
+    @staticmethod
+    def _same_smiles(reference: Chem.Mol, cofolded: Chem.Mol) -> bool:
+        return Chem.MolToSmiles(reference) == Chem.MolToSmiles(cofolded)
 
 
 @dataclass(frozen=True, eq=True)
