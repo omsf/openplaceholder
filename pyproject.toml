@@ -21,6 +21,7 @@ dependencies = [
     "gufe",
     "MDAnalysis",
     "rdkit",
+    "posebusters",
 ]
 dynamic = ["version"]
 

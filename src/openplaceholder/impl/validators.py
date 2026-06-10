@@ -2,12 +2,12 @@ from dataclasses import dataclass
 
 from MDAnalysis.guesser.tables import vdwradii
 from MDAnalysis.lib.distances import self_capped_distance
+from posebusters import PoseBusters
 from rdkit import Chem
 from rdkit.Chem import AllChem, inchi
-from posebusters import PoseBusters
 
 from openplaceholder.core.selection.validator import Validator
-from openplaceholder.core.structure.structure import Structure
+from openplaceholder.core.structure import Structure
 
 
 @dataclass(frozen=True, eq=True)
