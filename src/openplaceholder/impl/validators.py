@@ -4,6 +4,7 @@ from MDAnalysis.guesser.tables import vdwradii
 from MDAnalysis.lib.distances import self_capped_distance
 from rdkit import Chem
 from rdkit.Chem import AllChem, inchi
+from posebusters import PoseBusters
 
 from openplaceholder.core.selection.validator import Validator
 from openplaceholder.core.structure.structure import Structure
@@ -11,16 +12,32 @@ from openplaceholder.core.structure.structure import Structure
 
 @dataclass(frozen=True, eq=True)
 class PosebustersValidatorConfig:
-    pass
+    # the maximum number of allowed PoseBusters violations before a pose is considered flawed
+    max_violations: int = 0
 
 
 class PosebustersValidator(Validator):
+    """Reject poses that fail more than `max_failures` of the configured PoseBusters checks.
+
+    Passing generated molecules conformations will have reasonable geometries,
+    have standard bond lengths and angles and no intramolecular steric clashes.
+    """
 
     def __init__(self, config: PosebustersValidatorConfig):
         self._config = config
+        self._buster = PoseBusters(config="mol")
 
-    def validate(self, structures: list[Structure]) -> list[Structure]:
-        raise NotImplementedError
+    def _validate_structure(self, structure: Structure) -> bool:
+        return self._count_violations(structure) <= self._config.max_violations
+
+    def _count_violations(self, structure: Structure) -> int:
+        ligand = structure.to_mda_universe().select_atoms(f"resname {structure.ligand_name}").convert_to("RDKIT")
+        report = self._buster.bust(mol_pred=ligand)  # can use this later on for granular validation
+        violations = 0
+        for check, passed in report.iloc[0].items():
+            if not passed:
+                violations += 1
+        return violations
 
 
 @dataclass(frozen=True, eq=True)
@@ -89,11 +106,15 @@ class ClashValidatorConfig:
     clash_tolerance: float = 0.63
     # only atoms within this distance (angstrom) of the ligand are considered the binding site
     site_radius: float = 10.0
+    # the maximum number of allowed clashes before a pose is considered flawed
     max_clashes: int = 0
 
 
 class ClashValidator(Validator):
-    """Reject poses with too many steric clashes between non-bonded atoms in the binding site."""
+    """Reject poses with too many steric clashes between non-bonded atoms in the binding site.
+
+    We do this ourselves rather than with `PosebustersValidator` to allow more fine controls.
+    """
 
     def __init__(self, config: ClashValidatorConfig):
         self._config = config
@@ -114,3 +135,30 @@ class ClashValidator(Validator):
             if (indices[i], indices[j]) not in bonded and distance < tolerance * (radii[i] + radii[j]):
                 clashes += 1
         return clashes
+
+
+@dataclass(frozen=True, eq=True)
+class SequenceValidatorConfig:
+    # maximum number of residues allowed to differ from the requested sequence
+    max_mismatches: int = 0
+
+
+class SequenceValidator(Validator):
+    """Reject poses whose modelled protein sequence drifts from the requested amino-acid sequence."""
+
+    def __init__(self, config: SequenceValidatorConfig):
+        self._config = config
+
+    def _validate_structure(self, structure: Structure) -> bool:
+        original = structure.sequence
+        modelled = structure.to_mda_universe().select_atoms("protein").residues.sequence(format="string")
+        if len(original) != len(modelled):
+            return False
+        return self._count_mismatches(original, modelled) <= self._config.max_mismatches
+
+    def _count_mismatches(self, original: str, modelled: str) -> int:
+        substitutions = 0
+        for expected, actual in zip(original, modelled):
+            if expected != actual:
+                substitutions += 1
+        return substitutions
