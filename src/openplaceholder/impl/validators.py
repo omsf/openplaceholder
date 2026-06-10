@@ -10,10 +10,7 @@ from openplaceholder.core.structure.structure import Structure
 
 @dataclass(frozen=True, eq=True)
 class PosebustersValidatorConfig:
-    # PoseBusters preset to run: "mol" (ligand validity), "dock", "gen", ...
-    preset: str = "mol"
-    # maximum number of failed PoseBusters checks tolerated before a pose is rejected
-    max_failures: int = 0
+    pass
 
 
 class PosebustersValidator(Validator):
@@ -25,11 +22,6 @@ class PosebustersValidator(Validator):
 
     def __init__(self, config: PosebustersValidatorConfig):
         self._config = config
-        self._buster = PoseBusters(config=config.preset)
-
-    def _validate_structure(self, structure: Structure) -> bool:
-        failures = sum(1 for passed in self.results(structure).values() if not passed)
-        return failures <= self._config.max_failures
 
     def results(self, structure: Structure) -> dict[str, bool]:
         ligand = structure.to_mda().select_atoms(f"resname {structure.ligand_name}").convert_to("RDKIT")
@@ -72,3 +64,30 @@ class ClashValidator(Validator):
             if (indices[i], indices[j]) not in bonded and distance < tolerance * (radii[i] + radii[j]):
                 clashes += 1
         return clashes
+
+
+@dataclass(frozen=True, eq=True)
+class SequenceValidatorConfig:
+    # maximum number of residues allowed to differ from the requested sequence
+    max_mismatches: int = 0
+
+
+class SequenceValidator(Validator):
+    """Reject poses whose modelled protein sequence drifts from the requested amino-acid sequence."""
+
+    def __init__(self, config: SequenceValidatorConfig):
+        self._config = config
+
+    def _validate_structure(self, structure: Structure) -> bool:
+        original = structure.sequence
+        modelled = structure.to_mda_universe().select_atoms("protein").residues.sequence(format="string")
+        if len(original) != len(modelled):
+            return False
+        return self._count_mismatches(original, modelled) <= self._config.max_mismatches
+
+    def _count_mismatches(self, original: str, modelled: str) -> int:
+        substitutions = 0
+        for expected, actual in zip(original, modelled):
+            if expected != actual:
+                substitutions += 1
+        return substitutions
