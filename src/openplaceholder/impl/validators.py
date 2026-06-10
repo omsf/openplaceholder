@@ -26,9 +26,9 @@ class PosebustersValidator(Validator):
         self._buster = PoseBusters(config="mol")
 
     def _validate_structure(self, structure: Structure) -> bool:
-        return self._results(structure) <= self._config.max_violations
+        return self._count_violations(structure) <= self._config.max_violations
 
-    def _results(self, structure: Structure) -> dict[str, bool]:
+    def _count_violations(self, structure: Structure) -> int:
         ligand = structure.to_mda_universe().select_atoms(f"resname {structure.ligand_name}").convert_to("RDKIT")
         report = self._buster.bust(mol_pred=ligand)  # can use this later on for granular validation
         violations = 0
