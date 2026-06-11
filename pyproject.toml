@@ -20,6 +20,8 @@ requires-python = ">=3.12"
 dependencies = [
     "gufe",
     "MDAnalysis",
+    "rdkit<2026.3.3",
+    "posebusters",
 ]
 dynamic = ["version"]
 

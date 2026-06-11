@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from openplaceholder.core.structure.structure import Structure
+from openplaceholder.core.structure import Structure
 
 
 class Validator(ABC):

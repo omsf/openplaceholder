@@ -3,9 +3,10 @@ from dataclasses import dataclass
 from MDAnalysis.guesser.tables import vdwradii
 from MDAnalysis.lib.distances import self_capped_distance
 from posebusters import PoseBusters
+from rdkit import Chem
 
 from openplaceholder.core.selection.validator import Validator
-from openplaceholder.core.structure.structure import Structure
+from openplaceholder.core.structure import Structure
 
 
 @dataclass(frozen=True, eq=True)
@@ -39,6 +40,78 @@ class PosebustersValidator(Validator):
 
 
 @dataclass(frozen=True, eq=True)
+class StereoValidatorConfig:
+    # require the standard InChI of the predicted ligand to match the requested ligand
+    require_inchi_match: bool = True
+    # require the canonical isomeric SMILES of the predicted ligand to match the requested ligand
+    require_smiles_match: bool = True
+
+
+class StereoValidator(Validator):
+    """Reject poses whose predicted ligand stereochemistry drifts from
+    the requested ligand.
+
+    The requested ligand is taken from its SMILES; the predicted
+    ligand has its bond orders assigned from that template (so
+    connectivity is shared) and its stereochemistry perceived
+    independently from the 3D coordinates. The two are then compared
+    as canonical InChI and/or canonical isomeric SMILES. InChI is a
+    toolkit-independent, tautomer-normalised reference, while SMILES
+    is stricter and also captures enhanced stereochemistry InChI
+    cannot represent; requiring both to agree guards against the blind
+    spots of either representation.
+
+    """
+
+    def __init__(self, config: StereoValidatorConfig):
+        self._config = config
+
+    def _validate_structure(self, structure: Structure) -> bool:
+        reference = Chem.MolFromSmiles(structure.ligand_smiles)
+        predicted = self._predicted_mol(structure)
+
+        if self._config.require_inchi_match and not self._same_inchi(reference, predicted):
+            return False
+        if self._config.require_smiles_match and not self._same_smiles(reference, predicted):
+            return False
+        return True
+
+    def _predicted_mol(self, structure: Structure) -> Chem.Mol:
+        ligand_atoms = structure.to_mda_universe().select_atoms(f"resname {structure.ligand_name}")
+        # assume that the predicted ligands carry no explicit
+        # hydrogens, so force the conversion past that check and
+        # recover the heavy-atom skeleton; bond orders and hydrogens
+        # come from the template below.
+        mol = ligand_atoms.convert_to("RDKIT", force=True)
+        template = Chem.MolFromSmiles(structure.ligand_smiles)
+        mol = Chem.AllChem.AssignBondOrdersFromTemplate(template, mol)  # type: ignore[no-untyped-call]
+
+        # the forced conversion left atoms flagged as radicals with
+        # implicit hydrogens suppressed; clear that so sanitisation
+        # fills valences (and hydrogen counts) from the assigned bond
+        # orders.
+        editable = Chem.RWMol(mol)
+        for atom in editable.GetAtoms():
+            atom.SetNoImplicit(False)
+            atom.SetNumExplicitHs(0)
+            atom.SetNumRadicalElectrons(0)
+        mol = editable.GetMol()
+        Chem.SanitizeMol(mol)
+        Chem.AssignStereochemistryFrom3D(mol)
+        return mol
+
+    @staticmethod
+    def _same_inchi(mol_a: Chem.Mol, mol_b: Chem.Mol) -> bool:
+        inchi_a: str = Chem.inchi.MolToInchi(mol_a)  # type: ignore[no-untyped-call]
+        inchi_b: str = Chem.inchi.MolToInchi(mol_b)  # type: ignore[no-untyped-call]
+        return inchi_a == inchi_b
+
+    @staticmethod
+    def _same_smiles(mol_a: Chem.Mol, mol_b: Chem.Mol) -> bool:
+        return Chem.MolToSmiles(mol_a) == Chem.MolToSmiles(mol_b)
+
+
+@dataclass(frozen=True, eq=True)
 class ClashValidatorConfig:
     # a non-bonded atom pair clashes when closer than this fraction of their summed van der Waals radii
     clash_tolerance: float = 0.63
@@ -62,7 +135,7 @@ class ClashValidator(Validator):
 
     def _count_clashes(self, structure: Structure) -> int:
         ligand = f"resname {structure.ligand_name}"
-        site = structure.to_mda().select_atoms(f"({ligand}) or (around {self._config.site_radius} {ligand})")
+        site = structure.to_mda_universe().select_atoms(f"({ligand}) or (around {self._config.site_radius} {ligand})")
         radii = [vdwradii.get(element.upper(), 1.5) for element in site.elements]
         bonded = {tuple(bond) for bond in site.bonds.to_indices()}
         indices = site.ix
