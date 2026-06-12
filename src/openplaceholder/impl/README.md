@@ -10,19 +10,19 @@ linear: `selectors.py` → `transformations.py` → `mappers.py`.
 
 ```text
                               validators.py
-                         ┌──▶ rep ──╫──┐
-Ligand A ──▶ generator ──┼──▶ rep ──╫──┼──▶ merge A ─┐
-                         └──▶  ⋮  ──╫──┘             │
-                         ┌──▶ rep ──╫──┐             │
-Ligand B ──▶ generator ──┼──▶ rep ──╫──┼──▶ merge B ─┼──▶ selectors.py ──▶ transformations.py
-                         └──▶  ⋮  ──╫──┘             │                             │
-                         ┌──▶ rep ──╫──┐             │                             │
-Ligand n ──▶ generator ──┼──▶ rep ──╫──┼──▶ merge n ─┘                             ▼
-                         └──▶  ⋮  ──╫──┘                                      mappers.py
+                         ┌──> rep ──╫──┐
+Ligand A ──> generator ──┼──> rep ──╫──┼──> merge A ─┐
+                         └──> ... ──╫──┘             │
+                         ┌──> rep ──╫──┐             │
+Ligand B ──> generator ──┼──> rep ──╫──┼──> merge B ─┼──> selectors.py ──> transformations.py
+                         └──> ... ──╫──┘             │                             │
+                         ┌──> rep ──╫──┐             │                             │
+Ligand n ──> generator ──┼──> rep ──╫──┼──> merge n ─┘                             v
+                         └──> ... ──╫──┘                                      mappers.py
 ```
 
 `rep` = one inference replicate; each generator fans out into `n seeds × n diffusion samples`
-replicates (the `⋮` stands for the remaining replicates). The `╫` column is the single
+replicates (the `...` stands for the remaining replicates). The `╫` column is the single
 `validators.py` component: every replicate is gated individually as its line crosses the gate.
 
 Component annotations:
