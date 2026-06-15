@@ -67,3 +67,21 @@ class DirectoryArchive(ArtifactArchive):
             if structures:
                 artifacts.append(StructureGeneratorArtifact(structures=structures, **meta))
         return artifacts
+
+
+@dataclass(frozen=True, eq=True)
+class JSONArchiveConfig:
+    path: str | Path
+
+
+@dataclass(frozen=True, eq=True)
+class JSONArchive(ArtifactArchive):
+
+    def __init__(self, config: JSONArchiveConfig):
+        self._config = config
+
+    def read(self) -> list[StructureGeneratorArtifact]:
+        raise NotImplementedError
+
+    def write(self, artifacts: list[StructureGeneratorArtifact]) -> None:
+        raise NotImplementedError
