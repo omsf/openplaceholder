@@ -52,7 +52,6 @@ def resolve_pipeline(path: str | Path) -> Pipeline:
 
     selection_table = raw["selection"]
     validators = [_build_plugin(v) for v in selection_table.get("validators", [])]
-    filters = [_build_plugin(f) for f in selection_table.get("filtration", [])]
     selector = _build_plugin(selection_table.get("selector"))
 
     assembly = raw["assembly"]
@@ -64,7 +63,6 @@ def resolve_pipeline(path: str | Path) -> Pipeline:
     return Pipeline(
         generator=generator,
         validators=validators,
-        filters=filters,
         selector=selector,
         transformation=transformation,
         mapping=mapping,

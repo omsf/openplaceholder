@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from openplaceholder.core.assembly.mapper import Mapper
 from openplaceholder.core.assembly.transformation import Transformation
 from openplaceholder.core.generation.generator import StructureGenerator
-from openplaceholder.core.selection.filter import Filter
 from openplaceholder.core.selection.selector import Selector
 from openplaceholder.core.selection.validator import Validator
 
@@ -12,7 +11,6 @@ from openplaceholder.core.selection.validator import Validator
 class Pipeline:
     generator: StructureGenerator
     validators: list[Validator]
-    filters: list[Filter] | None
     selector: Selector
     # TODO: layered transformations? these might be order dependent so
     # need to be careful

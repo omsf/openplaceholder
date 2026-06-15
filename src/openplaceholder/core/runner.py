@@ -4,7 +4,6 @@ from openplaceholder.core.assembly.mapper import Mapper
 from openplaceholder.core.assembly.transformation import Transformation
 from openplaceholder.core.generation.generator import StructureGenerator
 from openplaceholder.core.pipeline import Pipeline
-from openplaceholder.core.selection.filter import Filter
 from openplaceholder.core.selection.selector import Selector
 from openplaceholder.core.selection.validator import Validator
 from openplaceholder.core.structure.structure import Structure
@@ -28,9 +27,6 @@ def run_serial(pipeline: Pipeline) -> AlchemicalNetwork:
         for validator in pipeline.validators:
             structures = validator.validate_structures(structures)
 
-        if pipeline.filters is not None:
-            for filt in pipeline.filters:
-                structures = filt.filter(structures)
         selected_structures.append(selector.select(structures))
 
     if transformation is not None:
