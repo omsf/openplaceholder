@@ -79,7 +79,7 @@ class Structure(JSONSerializable):
     @classmethod
     def from_dict(cls, data: dict[Any, Any]) -> Self:
         data.pop("__oph_custom__", None)
-        return cls(**data)  # type: ignore
+        return cls(**data)
 
 
 @dataclass(frozen=True, eq=True)

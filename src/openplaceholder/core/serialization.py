@@ -3,18 +3,18 @@ from abc import ABC, abstractmethod
 from dataclasses import asdict
 from typing import Any, Self
 
-_JSON_SERDE_CLASS_REGISTRY = {}
+_JSON_SERDE_CLASS_REGISTRY: dict[str, type[JSONSerializable]] = {}
 
 
 class JSONSerializable(ABC):
 
-    def __init_subclass__(cls, **kwargs):
+    def __init_subclass__(cls: type[JSONSerializable], **kwargs: dict[Any, Any]) -> None:
         super().__init_subclass__(**kwargs)
         key = f"{cls.__module__}.{cls.__qualname__}"
         _JSON_SERDE_CLASS_REGISTRY[key] = cls
 
     @staticmethod
-    def _dict_factory_hook(data):
+    def _dict_factory_hook(data: dict[Any, Any]) -> dict[Any, Any]:
         fields = []
         for key, value in data:
             if isinstance(value, JSONSerializable):
@@ -36,7 +36,7 @@ class InvalidClassEncoding(Exception): ...
 
 class OPHEncoder(json.JSONEncoder):
 
-    def default(self, obj) -> Any:
+    def default(self, obj: Any) -> Any:
         match obj:
             case JSONSerializable():
                 dct = obj.to_dict()
@@ -45,7 +45,7 @@ class OPHEncoder(json.JSONEncoder):
                 return super().default(obj)
 
 
-def oph_json_hook(dct):
+def oph_json_hook(dct: dict[Any, Any]) -> Any:
     """JSON decoder hook."""
 
     if (obj_type := dct.get("__oph_custom__", None)) is None:

@@ -75,7 +75,6 @@ class JSONArchiveConfig:
     path: str | Path
 
 
-@dataclass(frozen=True, eq=True)
 class JSONArchive(ArtifactArchive):
 
     def __init__(self, config: JSONArchiveConfig):
@@ -84,6 +83,10 @@ class JSONArchive(ArtifactArchive):
     def read(self) -> list[StructureGeneratorArtifact]:
         path = Path(self._config.path)
         content = path.read_text()
+
+        if not (isinstance(content, list) and all(isinstance(v, StructureGeneratorArtifact) for v in content)):
+            raise ValueError
+
         return from_json(content)
 
     def write(self, artifacts: list[StructureGeneratorArtifact]) -> None:
