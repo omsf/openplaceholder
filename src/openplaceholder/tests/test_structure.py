@@ -4,6 +4,7 @@ import tempfile
 from pathlib import Path
 from unittest import TestCase, skip
 
+from openplaceholder.core.serialization import from_json, to_json
 from openplaceholder.core.structure import (
     Structure,
     StructureFormat,
@@ -114,9 +115,9 @@ class TestStructureSet(TestCase):
             path = Path(tmpdir) / "structures.json"
             ss.write(path)
             assert path.exists()
-            content = json.loads(path.read_text())
-            assert "structures" in content
-            assert len(content["structures"]) == len(self.structures), len(content["structures"])
+            path.write_text(to_json(ss))
+            content = from_json(path.read_text())
+            assert content.structures == ss.structures
 
     def test_from_file(self) -> None:
         ss = StructureSet.from_structures(self.structures)

@@ -12,7 +12,7 @@ from typing import Any, Self
 import MDAnalysis as mda
 from MDAnalysis import Universe
 
-from openplaceholder.core.abc import JSONSerializable
+from openplaceholder.core.serialization import JSONSerializable, to_shallow_dict
 
 
 class UnsupportedFormatError(Exception):
@@ -74,12 +74,12 @@ class Structure(JSONSerializable):
         return mda.Universe(stream, topology_format=topology_format)
 
     def to_dict(self) -> dict[Any, Any]:
-        return asdict(self)
+        return to_shallow_dict(self)
 
     @classmethod
     def from_dict(cls, data: dict[Any, Any]) -> Self:
         data.pop("__oph_custom__", None)
-        return cls(**json.loads(data))  # type: ignore
+        return cls(**data)  # type: ignore
 
 
 @dataclass(frozen=True, eq=True)
@@ -107,11 +107,12 @@ class StructureSet(JSONSerializable):
             json.dump(asdict(self), f)
 
     def to_dict(self) -> dict[Any, Any]:
-        return asdict(self)
+        return to_shallow_dict(self)
 
     @classmethod
-    def from_dict(cls, dct) -> Self:
-        raise NotImplementedError
+    def from_dict(cls, data: dict[Any, Any]) -> Self:
+        data.pop("__oph_custom__", None)
+        return cls(**data)
 
     def __len__(self) -> int:
         return len(self.structures)

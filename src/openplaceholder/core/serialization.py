@@ -1,36 +1,71 @@
 import json
-from typing import Any
+from abc import ABC, abstractmethod
+from dataclasses import asdict
+from typing import Any, Self
 
-from openplaceholder.core.abc import JSONSerializable
-from openplaceholder.core.structure import Structure, StructureSet
-
-
-class OPHEncoder(json.JSONEncoder):
-    def default(self, obj: dict[Any, Any]) -> Any:
-        match obj:
-            case JSONSerializable():
-                return {"__oph_custom__": obj.__class__.__qualname__, **_dct}
-            case _:
-                return super().default()
+_JSON_SERDE_CLASS_REGISTRY = {}
 
 
-def load_json(data: str) -> dict[Any, Any]:
-    """Helper function for reading JSON data with custom encoding."""
-    return json.loads(data, object_hook=oph_json_hook)
+class JSONSerializable(ABC):
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        key = f"{cls.__module__}.{cls.__qualname__}"
+        _JSON_SERDE_CLASS_REGISTRY[key] = cls
+
+    @staticmethod
+    def _dict_factory_hook(data):
+        fields = []
+        for key, value in data:
+            if isinstance(value, JSONSerializable):
+                value = value.to_dict()
+            fields.append((key, value))
+
+        return dict(fields)
+
+    @classmethod
+    @abstractmethod
+    def from_dict(cls, data: dict[Any, Any]) -> Self: ...
+
+    @abstractmethod
+    def to_dict(self) -> dict[Any, Any]: ...
 
 
 class InvalidClassEncoding(Exception): ...
 
 
+class OPHEncoder(json.JSONEncoder):
+
+    def default(self, obj) -> Any:
+        match obj:
+            case JSONSerializable():
+                dct = obj.to_dict()
+                return {"__oph_custom__": f"{obj.__class__.__module__}.{obj.__class__.__qualname__}", **dct}
+            case _:
+                return super().default(obj)
+
+
 def oph_json_hook(dct):
     """JSON decoder hook."""
+
     if (obj_type := dct.get("__oph_custom__", None)) is None:
         return dct
+    if (cls := _JSON_SERDE_CLASS_REGISTRY.get(obj_type, None)) is not None:
+        return cls.from_dict(dct)
 
-    match obj_type:
-        case "Structure":
-            return Structure.from_json(obj_data)
-        case "StructureSet":
-            return StructureSet.from_json(obj_data)
-        case _:
-            raise InvalidClassEncoding()
+    raise InvalidClassEncoding()
+
+
+def to_shallow_dict(obj: JSONSerializable) -> dict[Any, Any]:
+    return {key: value for key, value in obj.__dict__.items()}
+
+
+def to_json(obj: JSONSerializable) -> str:
+    return json.dumps(
+        obj.to_dict() | {"__oph_custom__": f"{obj.__class__.__module__}.{obj.__class__.__qualname__}"}, cls=OPHEncoder
+    )
+
+
+def from_json(content: str) -> JSONSerializable:
+    obj = json.loads(content, object_hook=oph_json_hook)
+    return obj
