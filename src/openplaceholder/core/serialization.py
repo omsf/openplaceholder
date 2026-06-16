@@ -66,6 +66,6 @@ def to_json(obj: JSONSerializable) -> str:
     )
 
 
-def from_json(content: str) -> JSONSerializable:
+def from_json(content: str) -> Any:
     obj = json.loads(content, object_hook=oph_json_hook)
     return obj
