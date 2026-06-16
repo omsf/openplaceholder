@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from openplaceholder.core.generation.generator import StructureGeneratorArtifact
+from openplaceholder.core.serialization import OPHEncoder, from_json
 from openplaceholder.core.structure import Structure, StructureFormat
 
 
@@ -67,3 +68,29 @@ class DirectoryArchive(ArtifactArchive):
             if structures:
                 artifacts.append(StructureGeneratorArtifact(structures=structures, **meta))
         return artifacts
+
+
+@dataclass(frozen=True, eq=True)
+class JSONArchiveConfig:
+    path: str | Path
+
+
+class JSONArchive(ArtifactArchive):
+
+    def __init__(self, config: JSONArchiveConfig):
+        self._config = config
+
+    def read(self) -> list[StructureGeneratorArtifact]:
+        path = Path(self._config.path)
+        content = path.read_text()
+        decoded = from_json(content)
+
+        if not (isinstance(decoded, list) and all(isinstance(v, StructureGeneratorArtifact) for v in decoded)):
+            raise ValueError(decoded)
+
+        return decoded
+
+    def write(self, artifacts: list[StructureGeneratorArtifact]) -> None:
+        path = Path(self._config.path)
+        _json = json.dumps(artifacts, cls=OPHEncoder)
+        path.write_text(_json)

@@ -7,10 +7,12 @@ import json
 from dataclasses import asdict, dataclass, fields
 from enum import StrEnum
 from pathlib import Path
-from typing import Self
+from typing import Any, Self
 
 import MDAnalysis as mda
 from MDAnalysis import Universe
+
+from openplaceholder.core.serialization import JSONSerializable, to_shallow_dict
 
 
 class UnsupportedFormatError(Exception):
@@ -40,7 +42,7 @@ class StructureFormat(StrEnum):
 
 
 @dataclass(frozen=True, eq=True)
-class Structure:
+class Structure(JSONSerializable):
     sequence: str
     ligand_smiles: str
     ligand_name: str
@@ -71,20 +73,17 @@ class Structure:
                 )
         return mda.Universe(stream, topology_format=topology_format)
 
-    def write_json(self, file_path: str | Path) -> None:
-        file_path = Path(file_path)
-        _dct = asdict(self)
-        file_path.write_text(json.dumps(_dct))
+    def to_dict(self) -> dict[Any, Any]:
+        return to_shallow_dict(self)
 
     @classmethod
-    def read_json(cls, file_path: str | Path) -> Self:
-        file_path = Path(file_path)
-        content = file_path.read_text()
-        return cls(**json.loads(content))
+    def from_dict(cls, data: dict[Any, Any]) -> Self:
+        data.pop("__oph_custom__", None)
+        return cls(**data)
 
 
 @dataclass(frozen=True, eq=True)
-class StructureSet:
+class StructureSet(JSONSerializable):
     structures: list[Structure]
 
     def __post_init__(self) -> None:
@@ -106,6 +105,14 @@ class StructureSet:
         file_path = Path(file_path)
         with open(file_path, "w") as f:
             json.dump(asdict(self), f)
+
+    def to_dict(self) -> dict[Any, Any]:
+        return to_shallow_dict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[Any, Any]) -> Self:
+        data.pop("__oph_custom__", None)
+        return cls(**data)
 
     def __len__(self) -> int:
         return len(self.structures)
