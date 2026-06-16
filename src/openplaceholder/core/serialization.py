@@ -3,12 +3,12 @@ from abc import ABC, abstractmethod
 from dataclasses import asdict
 from typing import Any, Self
 
-_JSON_SERDE_CLASS_REGISTRY: dict[str, type[JSONSerializable]] = {}
+_JSON_SERDE_CLASS_REGISTRY: dict[str, "type[JSONSerializable]"] = {}
 
 
 class JSONSerializable(ABC):
 
-    def __init_subclass__(cls: type[JSONSerializable], **kwargs: dict[Any, Any]) -> None:
+    def __init_subclass__(cls: type[Self], **kwargs: dict[str, Any]) -> None:
         super().__init_subclass__(**kwargs)
         key = f"{cls.__module__}.{cls.__qualname__}"
         _JSON_SERDE_CLASS_REGISTRY[key] = cls

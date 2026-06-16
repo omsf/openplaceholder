@@ -83,11 +83,12 @@ class JSONArchive(ArtifactArchive):
     def read(self) -> list[StructureGeneratorArtifact]:
         path = Path(self._config.path)
         content = path.read_text()
+        decoded = from_json(content)
 
-        if not (isinstance(content, list) and all(isinstance(v, StructureGeneratorArtifact) for v in content)):
-            raise ValueError
+        if not (isinstance(decoded, list) and all(isinstance(v, StructureGeneratorArtifact) for v in decoded)):
+            raise ValueError(decoded)
 
-        return from_json(content)
+        return decoded
 
     def write(self, artifacts: list[StructureGeneratorArtifact]) -> None:
         path = Path(self._config.path)
