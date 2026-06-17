@@ -44,5 +44,3 @@ Component annotations:
   protein components and finetune structures as needed.
 - **mappers.py** — generate an alchemical network given settings defined by the user;
   produce an `AlchemicalNetwork`.
-
-Note: at this point the Type signatures in the code will not match what is described in this README.
