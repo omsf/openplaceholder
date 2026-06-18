@@ -5,8 +5,8 @@ A description of the components in the OpenPlaceholder Cofolding -> FEP pipeline
 Each ligand (`A`, `B`, …, `n`) is run through its own `generator`. Every ligand
 fans out into `n seeds × n diffusion samples` inference replicates that are each
 gated by `validators.py`. The surviving replicates merge per ligand, and the
-per-ligand results merge together into `selectors.py`. From there the pipeline is
-linear: `selectors.py` → `transformations.py` → `mappers.py`.
+per-ligand results merge together into `selector`. From there the pipeline is
+linear: `selector` → `transformations.py` → `mappers.py`.
 
 ```text
                               validators.py
@@ -14,7 +14,7 @@ linear: `selectors.py` → `transformations.py` → `mappers.py`.
 Ligand A ──> generator ──┼──> rep ──╫──┼──> merge A ─┐
                          └──> ... ──╫──┘             │
                          ┌──> rep ──╫──┐             │
-Ligand B ──> generator ──┼──> rep ──╫──┼──> merge B ─┼──> selectors.py ──> transformations.py
+Ligand B ──> generator ──┼──> rep ──╫──┼──> merge B ─┼──> selector  ──> transformations.py
                          └──> ... ──╫──┘             │                             │
                          ┌──> rep ──╫──┐             │                             │
 Ligand n ──> generator ──┼──> rep ──╫──┼──> merge n ─┘                             v
@@ -35,7 +35,7 @@ Component annotations:
   physically valid. These act on explicitly single-structure validations.
 - **merge X** — the surviving replicates for ligand `X` are collected back together before
   cross-ligand selection.
-- **selectors.py** — contextualizes each pose hypothesis relative to the other pose
+- **selector** — contextualizes each pose hypothesis relative to the other pose
   hypotheses of the same ligand, and to the pose hypotheses of the full set of ligands. It
   attempts to pick a combination of pose hypotheses (n=1 per ligand) that optimizes the set of
   selection heuristics, e.g. making sure that ligand poses occupy the same 3D volume; core atoms
