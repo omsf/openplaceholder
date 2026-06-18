@@ -2,14 +2,31 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from openplaceholder.core.loader import load_class, resolve_config_type
 from openplaceholder.core.selection.selector import Selector
 from openplaceholder.core.structure import Structure, StructureSet
 from openplaceholder.impl.selector.objective import Objective
 
 
 @dataclass(frozen=True, eq=True)
+class ObjectiveSpec:
+    """A single objective to optimize over, plus its weight in the combination."""
+
+    implementation: str
+    weight: float = 1.0
+
+
+@dataclass(frozen=True, eq=True)
 class MPOSelectorConfig:
-    pass
+    objectives: tuple[ObjectiveSpec, ...] = ()
+
+    def __post_init__(self) -> None:
+        # TOML gives raw dicts; coerce them into ObjectiveSpec instances.
+        coerced = tuple(
+            spec if isinstance(spec, ObjectiveSpec) else ObjectiveSpec(**spec)
+            for spec in self.objectives
+        )
+        object.__setattr__(self, "objectives", coerced)
 
 
 class MPOSelector(Selector):
@@ -23,8 +40,21 @@ class MPOSelector(Selector):
 
     def __init__(self, config: MPOSelectorConfig):
         self._config = config
-        # (objective, weight) pairs; populated from config once wiring lands.
-        self._objectives: list[tuple[Objective, float]] = []
+        self._objectives: list[tuple[Objective, float]] = [
+            (self._build_objective(spec.implementation), spec.weight)
+            for spec in config.objectives
+        ]
+
+    @staticmethod
+    def _build_objective(implementation: str) -> Objective:
+        cls = load_class(implementation)
+        config_type = resolve_config_type(cls)
+        # objective configs are param-less for now; when one gains parameters
+        # it defines its own __init__ annotation and we pass them through here.
+        objective = cls(config=config_type())
+        if not isinstance(objective, Objective):
+            raise TypeError(f"{implementation} is not an Objective")
+        return objective
 
     def select(self, structures: list[StructureSet]) -> list[Structure]:
         pool, groups = self._flatten(structures)
