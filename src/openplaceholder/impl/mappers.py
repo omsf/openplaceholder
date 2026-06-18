@@ -16,5 +16,5 @@ class LOMAPMapper(Mapper):
     def __init__(self, config: LOMAPMapperConfig):
         self._config = config
 
-    def map(self, structures: list[Structure]) -> AlchemicalNetwork:
+    def _map(self, structures: list[Structure]) -> AlchemicalNetwork:
         raise NotImplementedError

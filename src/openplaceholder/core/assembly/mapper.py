@@ -8,5 +8,8 @@ from openplaceholder.core.structure.structure import Structure
 class Mapper(ABC):
 
     @abstractmethod
-    def map(self, structures: list[Structure]) -> AlchemicalNetwork:
+    def _map(self, structures: list[Structure]) -> AlchemicalNetwork:
         raise NotImplementedError
+
+    def map(self, structures: list[Structure]) -> AlchemicalNetwork:
+        return self._map(structures)

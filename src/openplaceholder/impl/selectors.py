@@ -14,5 +14,5 @@ class CoordinationSelector(Selector):
     def __init__(self, config: CoordinationSelectorConfig):
         self._config = config
 
-    def select(self, structures: list[StructureSet]) -> Structure:
+    def _select(self, structures: list[StructureSet]) -> Structure:
         raise NotImplementedError

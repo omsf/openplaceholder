@@ -1,34 +1,33 @@
-import base64
-import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from openplaceholder.core.generation.archive import (
-    DirectoryArchive,
-    DirectoryArchiveConfig,
-)
 from openplaceholder.core.generation.generator import (
     StructureGenerator,
     StructureGeneratorArtifact,
+    StructureGeneratorConfigBase,
 )
-from openplaceholder.core.structure import Structure, StructureFormat
+from openplaceholder.impl.generator.archive import (
+    DirectoryArchiver,
+    DirectoryArchiverConfig,
+)
 
 
-@dataclass(frozen=True, eq=True)
-class DirectoryGeneratorConfig:
+@dataclass(frozen=True)
+class DirectoryGeneratorConfig(StructureGeneratorConfigBase):
     directory: str
 
 
 class DirectoryGenerator(StructureGenerator):
 
-    def __init__(self, config: DirectoryGeneratorConfig):
-        self._config = config
-        self._archive = DirectoryArchive(DirectoryArchiveConfig(directory=config.directory))
-        self.validate_input()
+    _config: DirectoryGeneratorConfig
 
-    def run(self) -> list[StructureGeneratorArtifact]:
-        return self._archive.read()
+    def _setup(self) -> None:
+        self._archiver: DirectoryArchiver = DirectoryArchiver(DirectoryArchiverConfig(directory=self._config.directory))
+        self.validate_inputs()
 
-    def validate_input(self) -> None:
+    def _run(self) -> list[StructureGeneratorArtifact]:
+        return self._archiver.read()
+
+    def _validate_inputs(self) -> None:
         if not Path(self._config.directory).exists():
             raise FileNotFoundError("Directory archive does not exist")

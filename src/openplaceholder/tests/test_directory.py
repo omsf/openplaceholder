@@ -1,11 +1,11 @@
 import tempfile
 from unittest import TestCase
 
-from openplaceholder.core.generation.archive import (
-    DirectoryArchive,
-    DirectoryArchiveConfig,
-)
 from openplaceholder.core.generation.generator import StructureGeneratorArtifact
+from openplaceholder.impl.generator.archive import (
+    DirectoryArchiver,
+    DirectoryArchiverConfig,
+)
 from openplaceholder.impl.generator.directory import (
     DirectoryGenerator,
     DirectoryGeneratorConfig,
@@ -23,8 +23,8 @@ class TestDirectoryGenerator(TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             artifact = StructureGeneratorArtifact.from_structures(make_structures(n_structures=3))
 
-            archive = DirectoryArchive(DirectoryArchiveConfig(directory=tmpdir))
-            archive.write([artifact])
+            archiver = DirectoryArchiver(DirectoryArchiverConfig(directory=tmpdir))
+            archiver.write([artifact])
 
             loaded = DirectoryGenerator(DirectoryGeneratorConfig(tmpdir)).run()
             assert len(loaded) == 1
