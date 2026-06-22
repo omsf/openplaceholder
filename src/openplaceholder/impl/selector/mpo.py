@@ -5,7 +5,7 @@ import numpy as np
 from openplaceholder.core.loader import load_class, resolve_config_type
 from openplaceholder.core.selection.selector import Selector
 from openplaceholder.core.structure import Structure, StructureSet
-from openplaceholder.impl.selector.objective import Objective
+from openplaceholder.core.selection.objective import Objective
 
 
 @dataclass(frozen=True, eq=True)

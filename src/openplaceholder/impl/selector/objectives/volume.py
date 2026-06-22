@@ -3,8 +3,8 @@ same region of 3D space."""
 
 from dataclasses import dataclass
 
+from openplaceholder.core.selection.objective import Objective, ObjectiveConfig
 from openplaceholder.core.structure import Structure
-from openplaceholder.impl.selector.objective import Objective, ObjectiveConfig
 
 
 @dataclass(frozen=True, eq=True)
