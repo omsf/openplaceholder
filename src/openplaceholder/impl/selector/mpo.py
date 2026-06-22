@@ -1,32 +1,31 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field, fields
+from typing import Any
 
 import numpy as np
 
-from openplaceholder.core.loader import load_class, resolve_config_type
+import openplaceholder.impl.selector.objectives  # noqa: F401  (populate registry)
+from openplaceholder.core.loader import resolve_config_type
+from openplaceholder.core.selection.objective import Objective, get_objective
 from openplaceholder.core.selection.selector import Selector
 from openplaceholder.core.structure import Structure, StructureSet
-from openplaceholder.core.selection.objective import Objective
-
-
-@dataclass(frozen=True, eq=True)
-class ObjectiveSpec:
-    """A single objective to optimize over, plus its weight in the combination."""
-
-    implementation: str
-    weight: float = 1.0
 
 
 @dataclass(frozen=True, eq=True)
 class MPOSelectorConfig:
-    objectives: tuple[ObjectiveSpec, ...] = ()
+    # objectives keyed by class name, e.g. {"VolumeOverlapObjective": {"weight": 1.0}}.
+    # Each entry's "weight" is its weight in the combination; remaining keys are
+    # passed to the objective's config.
+    objectives: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        # TOML gives raw dicts; coerce them into ObjectiveSpec instances.
-        coerced = tuple(
-            spec if isinstance(spec, ObjectiveSpec) else ObjectiveSpec(**spec)
-            for spec in self.objectives
-        )
-        object.__setattr__(self, "objectives", coerced)
+        for name, settings in self.objectives.items():
+            cls = get_objective(name)  # raises on unknown objective
+            if not isinstance(settings, dict):
+                raise TypeError(f"objective '{name}' settings must be a table")
+            params = {k: v for k, v in settings.items() if k != "weight"}
+            valid = {f.name for f in fields(resolve_config_type(cls))}
+            if extra := set(params) - valid:
+                raise ValueError(f"Unknown settings for objective '{name}': {extra}")
 
 
 class MPOSelector(Selector):
@@ -41,20 +40,16 @@ class MPOSelector(Selector):
     def __init__(self, config: MPOSelectorConfig):
         self._config = config
         self._objectives: list[tuple[Objective, float]] = [
-            (self._build_objective(spec.implementation), spec.weight)
-            for spec in config.objectives
+            (self._build_objective(name, settings), float(settings.get("weight", 1.0)))
+            for name, settings in config.objectives.items()
         ]
 
     @staticmethod
-    def _build_objective(implementation: str) -> Objective:
-        cls = load_class(implementation)
+    def _build_objective(name: str, settings: dict[str, Any]) -> Objective:
+        cls = get_objective(name)
         config_type = resolve_config_type(cls)
-        # objective configs are param-less for now; when one gains parameters
-        # it defines its own __init__ annotation and we pass them through here.
-        objective = cls(config=config_type())
-        if not isinstance(objective, Objective):
-            raise TypeError(f"{implementation} is not an Objective")
-        return objective
+        params = {k: v for k, v in settings.items() if k != "weight"}
+        return cls(config=config_type(**params))
 
     def select(self, structures: list[StructureSet]) -> list[Structure]:
         pool, groups = self._flatten(structures)

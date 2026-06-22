@@ -13,6 +13,17 @@ import numpy as np
 
 from openplaceholder.core.structure import Structure
 
+_OBJECTIVE_REGISTRY: dict[str, "type[Objective]"] = {}
+
+
+def get_objective(name: str) -> "type[Objective]":
+    """Look up a registered objective class by its name."""
+    try:
+        return _OBJECTIVE_REGISTRY[name]
+    except KeyError:
+        known = ", ".join(sorted(_OBJECTIVE_REGISTRY)) or "<none>"
+        raise KeyError(f"Unknown objective '{name}'. Registered: {known}")
+
 
 @dataclass(frozen=True, eq=True)
 class ObjectiveConfig:
@@ -20,6 +31,10 @@ class ObjectiveConfig:
 
 
 class Objective(ABC):
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        super().__init_subclass__(**kwargs)
+        _OBJECTIVE_REGISTRY[cls.__name__] = cls
 
     def __init__(self, config: ObjectiveConfig):
         self._config = config
