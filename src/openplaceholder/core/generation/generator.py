@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Self
 
 from openplaceholder.core.configuration import ConfigBase
-from openplaceholder.core.interface import Configurable, Module
+from openplaceholder.core.interface import Module
 from openplaceholder.core.structure import Structure, StructureSet
 
 

@@ -1,11 +1,11 @@
 from dataclasses import dataclass
 
-from openplaceholder.core.selection.selector import Selector
+from openplaceholder.core.selection.selector import Selector, SelectorConfigBase
 from openplaceholder.core.structure.structure import Structure, StructureSet
 
 
 @dataclass(frozen=True, eq=True)
-class CoordinationSelectorConfig:
+class CoordinationSelectorConfig(SelectorConfigBase):
     pass
 
 

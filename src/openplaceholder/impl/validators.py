@@ -5,12 +5,12 @@ from MDAnalysis.lib.distances import self_capped_distance
 from posebusters import PoseBusters
 from rdkit import Chem
 
-from openplaceholder.core.selection.validator import Validator
+from openplaceholder.core.selection.validator import Validator, ValidatorConfigBase
 from openplaceholder.core.structure import Structure
 
 
 @dataclass(frozen=True, eq=True)
-class PosebustersValidatorConfig:
+class PosebustersValidatorConfig(ValidatorConfigBase):
     # the maximum number of allowed PoseBusters violations before a pose is considered flawed
     max_violations: int = 0
 
@@ -21,6 +21,8 @@ class PosebustersValidator(Validator):
     Passing generated molecules conformations will have reasonable geometries,
     have standard bond lengths and angles and no intramolecular steric clashes.
     """
+
+    _config: PosebustersValidatorConfig
 
     def __init__(self, config: PosebustersValidatorConfig):
         self._config = config
@@ -40,7 +42,7 @@ class PosebustersValidator(Validator):
 
 
 @dataclass(frozen=True, eq=True)
-class StereoValidatorConfig:
+class StereoValidatorConfig(ValidatorConfigBase):
     # require the standard InChI of the predicted ligand to match the requested ligand
     require_inchi_match: bool = True
     # require the canonical isomeric SMILES of the predicted ligand to match the requested ligand
@@ -62,6 +64,8 @@ class StereoValidator(Validator):
     spots of either representation.
 
     """
+
+    _config: StereoValidatorConfig
 
     def __init__(self, config: StereoValidatorConfig):
         self._config = config
@@ -112,7 +116,7 @@ class StereoValidator(Validator):
 
 
 @dataclass(frozen=True, eq=True)
-class ClashValidatorConfig:
+class ClashValidatorConfig(ValidatorConfigBase):
     # a non-bonded atom pair clashes when closer than this fraction of their summed van der Waals radii
     clash_tolerance: float = 0.63
     # only atoms within this distance (angstrom) of the ligand are considered the binding site
@@ -126,6 +130,8 @@ class ClashValidator(Validator):
 
     We do this ourselves rather than with `PosebustersValidator` to allow more fine controls.
     """
+
+    _config: ClashValidatorConfig
 
     def __init__(self, config: ClashValidatorConfig):
         self._config = config
@@ -149,13 +155,15 @@ class ClashValidator(Validator):
 
 
 @dataclass(frozen=True, eq=True)
-class SequenceValidatorConfig:
+class SequenceValidatorConfig(ValidatorConfigBase):
     # maximum number of residues allowed to differ from the requested sequence
     max_mismatches: int = 0
 
 
 class SequenceValidator(Validator):
     """Reject poses whose modelled protein sequence drifts from the requested amino-acid sequence."""
+
+    _config: SequenceValidatorConfig
 
     def __init__(self, config: SequenceValidatorConfig):
         self._config = config

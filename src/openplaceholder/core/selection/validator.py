@@ -1,9 +1,14 @@
 from abc import ABC, abstractmethod
 
+from openplaceholder.core.configuration import ConfigBase
+from openplaceholder.core.interface import Module
 from openplaceholder.core.structure import Structure
 
 
-class Validator(ABC):
+class ValidatorConfigBase(ConfigBase): ...
+
+
+class Validator(Module, ABC):
 
     def validate_structures(self, structures: list[Structure]) -> list[Structure]:
         _structures = []

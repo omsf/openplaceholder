@@ -2,10 +2,15 @@ from abc import ABC, abstractmethod
 
 from gufe import AlchemicalNetwork
 
+from openplaceholder.core.configuration import ConfigBase
+from openplaceholder.core.interface import Module
 from openplaceholder.core.structure.structure import Structure
 
 
-class Mapper(ABC):
+class MapperConfigBase(ConfigBase): ...
+
+
+class Mapper(Module, ABC):
 
     @abstractmethod
     def _map(self, structures: list[Structure]) -> AlchemicalNetwork:

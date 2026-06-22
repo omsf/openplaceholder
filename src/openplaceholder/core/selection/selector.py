@@ -1,9 +1,14 @@
 from abc import ABC, abstractmethod
 
+from openplaceholder.core.configuration import ConfigBase
+from openplaceholder.core.interface import Module
 from openplaceholder.core.structure.structure import Structure, StructureSet
 
 
-class Selector(ABC):
+class SelectorConfigBase(ConfigBase): ...
+
+
+class Selector(Module, ABC):
 
     @abstractmethod
     def _select(self, structures: list[StructureSet]) -> list[Structure]:
