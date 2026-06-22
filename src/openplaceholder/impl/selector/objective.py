@@ -36,12 +36,15 @@ class Objective(ABC):
     def matrix(self, structures: Sequence[Structure]) -> np.ndarray:
         """Pairwise score matrix over a flat pool of candidate structures.
 
-        Entry ``[i, j]`` is ``score(structures[i], structures[j])``. Concrete
-        objectives may override this with a vectorized implementation.
+        Entry ``[i, j]`` is ``score(structures[i], structures[j])``. The default
+        builder assumes objectives are **symmetric**
+        (``score(a, b) == score(b, a)``) and leaves self-pairs on the diagonal at
+        ``1.0`` (only one structure per ligand is ever chosen, so self-pairs are
+        never both selected). Objectives that are asymmetric should override this.
         """
         n = len(structures)
-        scores = np.empty((n, n), dtype=float)
-        for i, a in enumerate(structures):
-            for j, b in enumerate(structures):
-                scores[i, j] = self.score(a, b)
+        scores = np.ones((n, n), dtype=float)
+        for i in range(n):
+            for j in range(i + 1, n):
+                scores[i, j] = scores[j, i] = self.score(structures[i], structures[j])
         return scores
