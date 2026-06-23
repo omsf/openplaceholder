@@ -7,7 +7,7 @@ from openplaceholder.core.interface import Module
 from openplaceholder.core.structure import Structure, StructureSet
 
 
-@dataclass(frozen=True, eq=True)
+@dataclass(frozen=True)
 class StructureGeneratorArtifact(StructureSet):
 
     sequence: str
@@ -68,6 +68,7 @@ class ArtifactArchiver(ABC):
         return self._archive_exists()
 
 
+@dataclass(frozen=True)
 class StructureGeneratorConfigBase(ConfigBase):
     archiver = None
 

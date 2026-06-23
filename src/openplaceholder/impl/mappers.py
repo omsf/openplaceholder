@@ -6,7 +6,7 @@ from openplaceholder.core.assembly.mapper import Mapper, MapperConfigBase
 from openplaceholder.core.structure import Structure
 
 
-@dataclass(frozen=True, eq=True)
+@dataclass(frozen=True)
 class LOMAPMapperConfig(MapperConfigBase): ...
 
 

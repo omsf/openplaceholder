@@ -1,5 +1,5 @@
 from dataclasses import dataclass
 
 
-@dataclass(frozen=True, eq=True)
+@dataclass(frozen=True)
 class ConfigBase: ...

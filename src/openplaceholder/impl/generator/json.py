@@ -12,7 +12,7 @@ from openplaceholder.impl.generator.archiver import (
 )
 
 
-@dataclass(frozen=True, eq=True)
+@dataclass(frozen=True)
 class JSONGeneratorConfig(StructureGeneratorConfigBase):
     path: str
 

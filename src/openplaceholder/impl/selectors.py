@@ -4,7 +4,7 @@ from openplaceholder.core.selection.selector import Selector, SelectorConfigBase
 from openplaceholder.core.structure import Structure, StructureSet
 
 
-@dataclass(frozen=True, eq=True)
+@dataclass(frozen=True)
 class CoordinationSelectorConfig(SelectorConfigBase):
     pass
 

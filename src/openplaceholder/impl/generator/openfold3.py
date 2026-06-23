@@ -17,7 +17,7 @@ from openplaceholder.core.structure import (
 )
 
 
-@dataclass(frozen=True, eq=True)
+@dataclass(frozen=True)
 class OpenFold3GeneratorConfig(StructureGeneratorConfigBase):
     sequence: str
     ligands: dict[str, str]

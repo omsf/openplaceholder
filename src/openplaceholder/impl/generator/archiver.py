@@ -11,7 +11,7 @@ from openplaceholder.core.serialization import OPHEncoder, from_json
 from openplaceholder.core.structure import Structure, StructureFormat
 
 
-@dataclass(frozen=True, eq=True)
+@dataclass(frozen=True)
 class DirectoryArchiverConfig:
     path: str
 
@@ -65,7 +65,7 @@ class DirectoryArchiver(ArtifactArchiver):
         return root.exists()
 
 
-@dataclass(frozen=True, eq=True)
+@dataclass(frozen=True)
 class JSONArchiverConfig:
     path: str | Path
 

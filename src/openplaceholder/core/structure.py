@@ -41,7 +41,7 @@ class StructureFormat(StrEnum):
                 raise ValueError(f"Unsupported structure suffix: '{suffix}'")
 
 
-@dataclass(frozen=True, eq=True)
+@dataclass(frozen=True)
 class Structure(JSONSerializable):
     sequence: str
     ligand_smiles: str
@@ -82,7 +82,7 @@ class Structure(JSONSerializable):
         return cls(**data)
 
 
-@dataclass(frozen=True, eq=True)
+@dataclass(frozen=True)
 class StructureSet(JSONSerializable):
     structures: list[Structure]
 

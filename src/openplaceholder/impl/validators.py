@@ -9,7 +9,7 @@ from openplaceholder.core.selection.validator import Validator, ValidatorConfigB
 from openplaceholder.core.structure import Structure
 
 
-@dataclass(frozen=True, eq=True)
+@dataclass(frozen=True)
 class PosebustersValidatorConfig(ValidatorConfigBase):
     # the maximum number of allowed PoseBusters violations before a pose is considered flawed
     max_violations: int = 0
@@ -40,7 +40,7 @@ class PosebustersValidator(Validator):
         return violations
 
 
-@dataclass(frozen=True, eq=True)
+@dataclass(frozen=True)
 class StereoValidatorConfig(ValidatorConfigBase):
     # require the standard InChI of the predicted ligand to match the requested ligand
     require_inchi_match: bool = True
@@ -114,7 +114,7 @@ class StereoValidator(Validator):
         return Chem.MolToSmiles(mol_a) == Chem.MolToSmiles(mol_b)
 
 
-@dataclass(frozen=True, eq=True)
+@dataclass(frozen=True)
 class ClashValidatorConfig(ValidatorConfigBase):
     # a non-bonded atom pair clashes when closer than this fraction of their summed van der Waals radii
     clash_tolerance: float = 0.63
@@ -153,7 +153,7 @@ class ClashValidator(Validator):
         return clashes
 
 
-@dataclass(frozen=True, eq=True)
+@dataclass(frozen=True)
 class SequenceValidatorConfig(ValidatorConfigBase):
     # maximum number of residues allowed to differ from the requested sequence
     max_mismatches: int = 0

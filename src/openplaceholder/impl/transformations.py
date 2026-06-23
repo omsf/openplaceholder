@@ -7,7 +7,7 @@ from openplaceholder.core.assembly.transformation import (
 from openplaceholder.core.structure.structure import Structure
 
 
-@dataclass(frozen=True, eq=True)
+@dataclass(frozen=True)
 class MaxVolumeSiteTransformationConfig(TransformationConfigBase):
     pass
 
