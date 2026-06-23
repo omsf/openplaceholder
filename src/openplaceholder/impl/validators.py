@@ -24,8 +24,7 @@ class PosebustersValidator(Validator):
 
     _config: PosebustersValidatorConfig
 
-    def __init__(self, config: PosebustersValidatorConfig):
-        self._config = config
+    def _setup(self) -> None:
         self._buster = PoseBusters(config="mol")
 
     def _validate_structure(self, structure: Structure) -> bool:
@@ -67,8 +66,8 @@ class StereoValidator(Validator):
 
     _config: StereoValidatorConfig
 
-    def __init__(self, config: StereoValidatorConfig):
-        self._config = config
+    def _setup(self) -> None:
+        pass
 
     def _validate_structure(self, structure: Structure) -> bool:
         reference = Chem.MolFromSmiles(structure.ligand_smiles)
@@ -133,8 +132,8 @@ class ClashValidator(Validator):
 
     _config: ClashValidatorConfig
 
-    def __init__(self, config: ClashValidatorConfig):
-        self._config = config
+    def _setup(self) -> None:
+        pass
 
     def _validate_structure(self, structure: Structure) -> bool:
         return self._count_clashes(structure) <= self._config.max_clashes
@@ -164,9 +163,6 @@ class SequenceValidator(Validator):
     """Reject poses whose modelled protein sequence drifts from the requested amino-acid sequence."""
 
     _config: SequenceValidatorConfig
-
-    def __init__(self, config: SequenceValidatorConfig):
-        self._config = config
 
     def _validate_structure(self, structure: Structure) -> bool:
         original = structure.sequence

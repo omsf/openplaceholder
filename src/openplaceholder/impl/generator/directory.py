@@ -14,7 +14,7 @@ from openplaceholder.impl.generator.archiver import (
 
 @dataclass(frozen=True)
 class DirectoryGeneratorConfig(StructureGeneratorConfigBase):
-    directory: str
+    path: str
 
 
 class DirectoryGenerator(StructureGenerator):
@@ -22,12 +22,12 @@ class DirectoryGenerator(StructureGenerator):
     _config: DirectoryGeneratorConfig
 
     def _setup(self) -> None:
-        self._archiver: DirectoryArchiver = DirectoryArchiver(DirectoryArchiverConfig(directory=self._config.directory))
+        self._archiver: DirectoryArchiver = DirectoryArchiver(DirectoryArchiverConfig(path=self._config.path))
         self.validate_inputs()
 
     def _run(self) -> list[StructureGeneratorArtifact]:
         return self._archiver.read()
 
     def _validate_inputs(self) -> None:
-        if not Path(self._config.directory).exists():
+        if not Path(self._config.path).exists():
             raise FileNotFoundError("Directory archive does not exist")

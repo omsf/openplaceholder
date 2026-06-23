@@ -23,7 +23,7 @@ class TestDirectoryGenerator(TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             artifact = StructureGeneratorArtifact.from_structures(make_structures(n_structures=3))
 
-            archiver = DirectoryArchiver(DirectoryArchiverConfig(directory=tmpdir))
+            archiver = DirectoryArchiver(DirectoryArchiverConfig(path=tmpdir))
             archiver.write([artifact])
 
             loaded = DirectoryGenerator(DirectoryGeneratorConfig(tmpdir)).run()

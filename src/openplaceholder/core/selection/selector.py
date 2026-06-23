@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 
 from openplaceholder.core.configuration import ConfigBase
 from openplaceholder.core.interface import Module
-from openplaceholder.core.structure.structure import Structure, StructureSet
+from openplaceholder.core.structure import Structure, StructureSet
 
 
 class SelectorConfigBase(ConfigBase): ...

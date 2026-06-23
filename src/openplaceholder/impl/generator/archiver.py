@@ -13,7 +13,7 @@ from openplaceholder.core.structure import Structure, StructureFormat
 
 @dataclass(frozen=True, eq=True)
 class DirectoryArchiverConfig:
-    directory: str
+    path: str
 
 
 class DirectoryArchiver(ArtifactArchiver):
@@ -22,7 +22,7 @@ class DirectoryArchiver(ArtifactArchiver):
         self._config = config
 
     def _write(self, artifacts: list[StructureGeneratorArtifact]) -> None:
-        root = Path(self._config.directory)
+        root = Path(self._config.path)
         root.mkdir(parents=True, exist_ok=True)
         for artifact in artifacts:
             artifact_dir = root / f"{artifact.ligand_name}"
@@ -38,7 +38,7 @@ class DirectoryArchiver(ArtifactArchiver):
                 (artifact_dir / f"pose_{i}{suffix}").write_bytes(structure.decode_structure_data())
 
     def _read(self) -> list[StructureGeneratorArtifact]:
-        root = Path(self._config.directory)
+        root = Path(self._config.path)
         artifacts: list[StructureGeneratorArtifact] = []
         for artifact_dir in filter(lambda d: d.is_dir(), root.iterdir()):
 
@@ -61,7 +61,7 @@ class DirectoryArchiver(ArtifactArchiver):
         return artifacts
 
     def _archive_exists(self) -> bool:
-        root = Path(self._config.directory)
+        root = Path(self._config.path)
         return root.exists()
 
 
