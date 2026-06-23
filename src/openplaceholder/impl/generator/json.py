@@ -6,7 +6,7 @@ from openplaceholder.core.generation.generator import (
     StructureGeneratorArtifact,
     StructureGeneratorConfigBase,
 )
-from openplaceholder.impl.generator.archive import (
+from openplaceholder.impl.generator.archiver import (
     JSONArchiver,
     JSONArchiverConfig,
 )

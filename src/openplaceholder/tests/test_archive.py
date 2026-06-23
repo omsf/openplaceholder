@@ -2,7 +2,7 @@ import tempfile
 from unittest import TestCase
 
 from openplaceholder.core.generation.generator import StructureGeneratorArtifact
-from openplaceholder.impl.generator.archive import JSONArchiver, JSONArchiverConfig
+from openplaceholder.impl.generator.archiver import JSONArchiver, JSONArchiverConfig
 from openplaceholder.tests.helpers import make_structures
 
 

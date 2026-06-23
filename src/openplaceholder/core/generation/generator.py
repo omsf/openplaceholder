@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Self
+from typing import Any, Self
 
 from openplaceholder.core.configuration import ConfigBase
 from openplaceholder.core.interface import Module
@@ -36,7 +36,15 @@ class StructureGeneratorArtifact(StructureSet):
         return cls(structures=structures, sequence=sequence, ligand_smiles=ligand_smiles, ligand_name=ligand_name)
 
 
+_ARCHIVER_REGISTRY: dict[str, "type[ArtifactArchiver]"] = {}
+
+
 class ArtifactArchiver(ABC):
+
+    def __init_subclass__(cls: type[Self], **kwargs: dict[str, Any]) -> None:
+        super().__init_subclass__(**kwargs)
+        key = f"{cls.__module__}.{cls.__qualname__}"
+        _ARCHIVER_REGISTRY[key] = cls
 
     @abstractmethod
     def _write(self, artifacts: list["StructureGeneratorArtifact"]) -> None:
@@ -85,7 +93,12 @@ class StructureGenerator(Module, ABC):
         if self._archiver and self._archiver.archive_exists():
             return self._archiver.read()
 
-        return self._run()
+        artifacts = self._run()
+
+        if self._archiver:
+            self._archiver.write(artifacts)
+
+        return artifacts
 
     def validate_inputs(self) -> None:
 

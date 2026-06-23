@@ -26,8 +26,6 @@ class Configurable(ABC):
 
 class Module(Configurable, ABC):
 
-    _config: ConfigBase
-
     def __init__(self, config: ConfigBase):
         self._check_config_type(config)
         self._config = config
