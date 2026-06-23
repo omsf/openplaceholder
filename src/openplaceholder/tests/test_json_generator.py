@@ -17,7 +17,7 @@ class TestJSONGenerator(TestCase):
 
     def test_invalid_path(self) -> None:
         with self.assertRaises(FileNotFoundError):
-            JSONGenerator(JSONGeneratorConfig("not_a_file.json"))
+            JSONGenerator(JSONGeneratorConfig(path="not_a_file.json"))
 
     def test_round_trip(self) -> None:
         with tempfile.NamedTemporaryFile() as tmpfile:
@@ -26,7 +26,7 @@ class TestJSONGenerator(TestCase):
             archiver = JSONArchiver(JSONArchiverConfig(path=tmpfile.name))
             archiver.write([artifact])
 
-            loaded = JSONGenerator(JSONGeneratorConfig(tmpfile.name)).run()
+            loaded = JSONGenerator(JSONGeneratorConfig(path=tmpfile.name)).run()
             assert len(loaded) == 1
             assert loaded[0].sequence == artifact.sequence
             assert loaded[0].ligand_smiles == artifact.ligand_smiles

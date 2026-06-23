@@ -17,7 +17,7 @@ class TestDirectoryGenerator(TestCase):
 
     def test_invalid_directory(self) -> None:
         with self.assertRaises(FileNotFoundError):
-            DirectoryGenerator(DirectoryGeneratorConfig("not_a_directory/"))
+            DirectoryGenerator(DirectoryGeneratorConfig(path="not_a_directory/"))
 
     def test_round_trip(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -26,7 +26,7 @@ class TestDirectoryGenerator(TestCase):
             archiver = DirectoryArchiver(DirectoryArchiverConfig(path=tmpdir))
             archiver.write([artifact])
 
-            loaded = DirectoryGenerator(DirectoryGeneratorConfig(tmpdir)).run()
+            loaded = DirectoryGenerator(DirectoryGeneratorConfig(path=tmpdir)).run()
             assert len(loaded) == 1
             assert loaded[0].sequence == artifact.sequence
             assert loaded[0].ligand_smiles == artifact.ligand_smiles

@@ -72,6 +72,8 @@ class JSONArchiverConfig:
 
 class JSONArchiver(ArtifactArchiver):
 
+    _config: JSONArchiverConfig
+
     def __init__(self, config: JSONArchiverConfig):
         self._config = config
 

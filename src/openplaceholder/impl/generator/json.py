@@ -23,7 +23,6 @@ class JSONGenerator(StructureGenerator):
 
     def _setup(self) -> None:
         self._archiver: JSONArchiver = JSONArchiver(JSONArchiverConfig(path=self._config.path))
-        self.validate_inputs()
 
     def _run(self) -> list[StructureGeneratorArtifact]:
         return self._archiver.read()

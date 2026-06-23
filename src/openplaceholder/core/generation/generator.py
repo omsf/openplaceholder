@@ -70,15 +70,13 @@ class ArtifactArchiver(ABC):
 
 @dataclass(frozen=True)
 class StructureGeneratorConfigBase(ConfigBase):
-    archiver = None
+    pass
 
 
 class StructureGenerator(Module, ABC):
 
-    _archiver: ArtifactArchiver | None = None
-
-    def __init__(self, *args, **kwargs) -> None:  # type: ignore
-        super().__init__(*args, **kwargs)
+    def __init__(self, config: StructureGeneratorConfigBase) -> None:
+        super().__init__(config)
         self.validate_inputs()
 
     @abstractmethod
@@ -90,23 +88,8 @@ class StructureGenerator(Module, ABC):
         raise NotImplementedError
 
     def run(self) -> list[StructureGeneratorArtifact]:
-
-        if self._archiver and self._archiver.archive_exists():
-            return self._archiver.read()
-
         artifacts = self._run()
-
-        if self._archiver:
-            self._archiver.write(artifacts)
-
         return artifacts
 
     def validate_inputs(self) -> None:
-
-        if archiver := getattr(self, "_archiver", None):
-            if not isinstance(archiver, ArtifactArchiver):
-                raise ValueError("archiver attribute for a generator must be an Archiver instance")
-        else:
-            self._archiver = None
-
         self._validate_inputs()
