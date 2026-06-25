@@ -6,12 +6,12 @@ import numpy as np
 import openplaceholder.impl.selector.objectives  # noqa: F401  (populate registry)
 from openplaceholder.core.loader import resolve_config_type
 from openplaceholder.core.selection.objective import Objective, get_objective
-from openplaceholder.core.selection.selector import Selector
+from openplaceholder.core.selection.selector import Selector, SelectorConfigBase
 from openplaceholder.core.structure import Structure, StructureSet
 
 
-@dataclass(frozen=True, eq=True)
-class MPOSelectorConfig:
+@dataclass(frozen=True)
+class MPOSelectorConfig(SelectorConfigBase):
     # objectives keyed by class name, e.g. {"VolumeOverlapObjective": {"weight": 1.0}}.
     # Each entry's "weight" is its weight in the combination; remaining keys are
     # passed to the objective's config.
@@ -37,11 +37,12 @@ class MPOSelector(Selector):
     single structure per ligand.
     """
 
-    def __init__(self, config: MPOSelectorConfig):
-        self._config = config
+    _config: MPOSelectorConfig
+
+    def _setup(self):
         self._objectives: list[tuple[Objective, float]] = [
             (self._build_objective(name, settings), float(settings.get("weight", 1.0)))
-            for name, settings in config.objectives.items()
+            for name, settings in self._config.objectives.items()
         ]
 
     @staticmethod
@@ -51,7 +52,7 @@ class MPOSelector(Selector):
         params = {k: v for k, v in settings.items() if k != "weight"}
         return cls(config=config_type(**params))
 
-    def select(self, structures: list[StructureSet]) -> list[Structure]:
+    def _select(self, structures: list[StructureSet]) -> list[Structure]:
         pool, groups = self._flatten(structures)
         combined = self._combine(pool)
         chosen = self._optimize(combined, groups)

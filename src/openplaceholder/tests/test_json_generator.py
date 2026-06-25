@@ -3,30 +3,30 @@ from unittest import TestCase
 
 from openplaceholder.core.generation.generator import StructureGeneratorArtifact
 from openplaceholder.impl.generator.archiver import (
-    DirectoryArchiver,
-    DirectoryArchiverConfig,
+    JSONArchiver,
+    JSONArchiverConfig,
 )
-from openplaceholder.impl.generator.directory import (
-    DirectoryGenerator,
-    DirectoryGeneratorConfig,
+from openplaceholder.impl.generator.json import (
+    JSONGenerator,
+    JSONGeneratorConfig,
 )
 from openplaceholder.tests.helpers import make_structures
 
 
-class TestDirectoryGenerator(TestCase):
+class TestJSONGenerator(TestCase):
 
-    def test_invalid_directory(self) -> None:
+    def test_invalid_path(self) -> None:
         with self.assertRaises(FileNotFoundError):
-            DirectoryGenerator(DirectoryGeneratorConfig(path="not_a_directory/"))
+            JSONGenerator(JSONGeneratorConfig(path="not_a_file.json"))
 
     def test_round_trip(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
+        with tempfile.NamedTemporaryFile() as tmpfile:
             artifact = StructureGeneratorArtifact.from_structures(make_structures(n_structures=3))
 
-            archiver = DirectoryArchiver(DirectoryArchiverConfig(path=tmpdir))
+            archiver = JSONArchiver(JSONArchiverConfig(path=tmpfile.name))
             archiver.write([artifact])
 
-            loaded = DirectoryGenerator(DirectoryGeneratorConfig(path=tmpdir)).run()
+            loaded = JSONGenerator(JSONGeneratorConfig(path=tmpfile.name)).run()
             assert len(loaded) == 1
             assert loaded[0].sequence == artifact.sequence
             assert loaded[0].ligand_smiles == artifact.ligand_smiles

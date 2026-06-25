@@ -9,12 +9,16 @@ from typing import Any, cast
 from openplaceholder.core.generation.generator import (
     StructureGenerator,
     StructureGeneratorArtifact,
+    StructureGeneratorConfigBase,
 )
-from openplaceholder.core.structure import Structure, StructureFormat
+from openplaceholder.core.structure import (
+    Structure,
+    StructureFormat,
+)
 
 
-@dataclass(frozen=True, eq=True)
-class OpenFold3GeneratorConfig:
+@dataclass(frozen=True)
+class OpenFold3GeneratorConfig(StructureGeneratorConfigBase):
     sequence: str
     ligands: dict[str, str]
     n_diffusion_samples: int
@@ -27,10 +31,12 @@ class OpenFold3GeneratorConfig:
 
 class OpenFold3Generator(StructureGenerator):
 
-    def __init__(self, config: OpenFold3GeneratorConfig):
-        self._config = config
+    _config: OpenFold3GeneratorConfig
 
-    def run(self) -> list[StructureGeneratorArtifact]:
+    def _setup(self) -> None:
+        pass
+
+    def _run(self) -> list[StructureGeneratorArtifact]:
 
         self._prepare_openfold_inputs()
 
@@ -183,5 +189,4 @@ experiment_settings:
         generator_dir = Path(self._config.generator_directory)
         shutil.rmtree(generator_dir)
 
-    def validate_input(self) -> None:
-        raise NotImplementedError
+    def _validate_inputs(self) -> None: ...

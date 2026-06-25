@@ -27,7 +27,7 @@ def generate_fake_run_output(gen_dir: Path, n_seeds: int, n_diffusion_samples: i
                 file_path.write_bytes(random.randbytes(8))
 
 
-class TestOpenFold3(unittest.TestCase):
+class TestOpenFold3Generator(unittest.TestCase):
 
     def test_mocked_run(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

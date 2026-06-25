@@ -7,27 +7,26 @@ from openplaceholder.core.generation.generator import (
     StructureGeneratorConfigBase,
 )
 from openplaceholder.impl.generator.archiver import (
-    DirectoryArchiver,
-    DirectoryArchiverConfig,
+    JSONArchiver,
+    JSONArchiverConfig,
 )
 
 
 @dataclass(frozen=True)
-class DirectoryGeneratorConfig(StructureGeneratorConfigBase):
+class JSONGeneratorConfig(StructureGeneratorConfigBase):
     path: str
 
 
-class DirectoryGenerator(StructureGenerator):
+class JSONGenerator(StructureGenerator):
 
-    _config: DirectoryGeneratorConfig
+    _config: JSONGeneratorConfig
 
     def _setup(self) -> None:
-        self._archiver: DirectoryArchiver = DirectoryArchiver(DirectoryArchiverConfig(path=self._config.path))
-        self.validate_inputs()
+        self._archiver: JSONArchiver = JSONArchiver(JSONArchiverConfig(path=self._config.path))
 
     def _run(self) -> list[StructureGeneratorArtifact]:
         return self._archiver.read()
 
     def _validate_inputs(self) -> None:
         if not Path(self._config.path).exists():
-            raise FileNotFoundError("Directory archive does not exist")
+            raise FileNotFoundError("JSON archive does not exist")

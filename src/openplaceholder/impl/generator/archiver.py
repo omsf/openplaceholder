@@ -1,37 +1,28 @@
 import base64
 import json
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 
-from openplaceholder.core.generation.generator import StructureGeneratorArtifact
+from openplaceholder.core.generation.generator import (
+    ArtifactArchiver,
+    StructureGeneratorArtifact,
+)
 from openplaceholder.core.serialization import OPHEncoder, from_json
 from openplaceholder.core.structure import Structure, StructureFormat
 
 
-class ArtifactArchive(ABC):
-
-    @abstractmethod
-    def write(self, artifacts: list[StructureGeneratorArtifact]) -> None:
-        raise NotImplementedError
-
-    @abstractmethod
-    def read(self) -> list[StructureGeneratorArtifact]:
-        raise NotImplementedError
+@dataclass(frozen=True)
+class DirectoryArchiverConfig:
+    path: str
 
 
-@dataclass(frozen=True, eq=True)
-class DirectoryArchiveConfig:
-    directory: str
+class DirectoryArchiver(ArtifactArchiver):
 
-
-class DirectoryArchive(ArtifactArchive):
-
-    def __init__(self, config: DirectoryArchiveConfig):
+    def __init__(self, config: DirectoryArchiverConfig):
         self._config = config
 
-    def write(self, artifacts: list[StructureGeneratorArtifact]) -> None:
-        root = Path(self._config.directory)
+    def _write(self, artifacts: list[StructureGeneratorArtifact]) -> None:
+        root = Path(self._config.path)
         root.mkdir(parents=True, exist_ok=True)
         for artifact in artifacts:
             artifact_dir = root / f"{artifact.ligand_name}"
@@ -46,8 +37,8 @@ class DirectoryArchive(ArtifactArchive):
                 suffix = StructureFormat(structure.structure_format).to_suffix()
                 (artifact_dir / f"pose_{i}{suffix}").write_bytes(structure.decode_structure_data())
 
-    def read(self) -> list[StructureGeneratorArtifact]:
-        root = Path(self._config.directory)
+    def _read(self) -> list[StructureGeneratorArtifact]:
+        root = Path(self._config.path)
         artifacts: list[StructureGeneratorArtifact] = []
         for artifact_dir in filter(lambda d: d.is_dir(), root.iterdir()):
 
@@ -69,18 +60,24 @@ class DirectoryArchive(ArtifactArchive):
                 artifacts.append(StructureGeneratorArtifact(structures=structures, **meta))
         return artifacts
 
+    def _archive_exists(self) -> bool:
+        root = Path(self._config.path)
+        return root.exists()
 
-@dataclass(frozen=True, eq=True)
-class JSONArchiveConfig:
+
+@dataclass(frozen=True)
+class JSONArchiverConfig:
     path: str | Path
 
 
-class JSONArchive(ArtifactArchive):
+class JSONArchiver(ArtifactArchiver):
 
-    def __init__(self, config: JSONArchiveConfig):
+    _config: JSONArchiverConfig
+
+    def __init__(self, config: JSONArchiverConfig):
         self._config = config
 
-    def read(self) -> list[StructureGeneratorArtifact]:
+    def _read(self) -> list[StructureGeneratorArtifact]:
         path = Path(self._config.path)
         content = path.read_text()
         decoded = from_json(content)
@@ -90,7 +87,11 @@ class JSONArchive(ArtifactArchive):
 
         return decoded
 
-    def write(self, artifacts: list[StructureGeneratorArtifact]) -> None:
+    def _write(self, artifacts: list[StructureGeneratorArtifact]) -> None:
         path = Path(self._config.path)
         _json = json.dumps(artifacts, cls=OPHEncoder)
         path.write_text(_json)
+
+    def _archive_exists(self) -> bool:
+        path = Path(self._config.path)
+        return path.exists()
