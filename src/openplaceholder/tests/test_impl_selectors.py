@@ -1,9 +1,6 @@
 from unittest import TestCase
 
-from openplaceholder.impl.selector.mpo import (
-    MPOSelector,
-    MPOSelectorConfig
-)
+from openplaceholder.impl.selector.mpo import MPOSelector, MPOSelectorConfig
 
 
 class TestMPOSelector(TestCase):
