@@ -1,18 +1,20 @@
 from dataclasses import dataclass
 
-from openplaceholder.core.selection.selector import Selector
-from openplaceholder.core.structure.structure import Structure, StructureSet
+from openplaceholder.core.selection.selector import Selector, SelectorConfigBase
+from openplaceholder.core.structure import Structure, StructureSet
 
 
-@dataclass(frozen=True, eq=True)
-class CoordinationSelectorConfig:
+@dataclass(frozen=True)
+class CoordinationSelectorConfig(SelectorConfigBase):
     pass
 
 
 class CoordinationSelector(Selector):
 
-    def __init__(self, config: CoordinationSelectorConfig):
-        self._config = config
+    _config: CoordinationSelectorConfig
 
-    def select(self, structures: list[StructureSet]) -> Structure:
+    def _setup(self) -> None:
+        pass
+
+    def _select(self, structures: list[StructureSet]) -> list[Structure]:
         raise NotImplementedError

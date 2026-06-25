@@ -7,7 +7,7 @@ from openplaceholder.core.selection.selector import Selector
 from openplaceholder.core.selection.validator import Validator
 
 
-@dataclass(frozen=True, eq=True)
+@dataclass(frozen=True)
 class Pipeline:
     generator: StructureGenerator
     validators: list[Validator]
