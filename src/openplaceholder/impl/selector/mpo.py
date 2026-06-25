@@ -39,7 +39,7 @@ class MPOSelector(Selector):
 
     _config: MPOSelectorConfig
 
-    def _setup(self):
+    def _setup(self) -> None:
         self._objectives: list[tuple[Objective, float]] = [
             (self._build_objective(name, settings), float(settings.get("weight", 1.0)))
             for name, settings in self._config.objectives.items()
