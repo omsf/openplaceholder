@@ -6,6 +6,15 @@ from openplaceholder.core.configuration import ConfigBase
 
 
 class Configurable(ABC):
+    """An abstract class which enforces that enforces attribute annotions.
+
+    Concrete subclasses of ``Configurable`` are required to have a
+    ``_config`` attribute annotion whose type is a subclass of
+    ``ConfigBase``. This provides a compile-time verification that
+    downstream classes conform the a standard set of configure
+    expectations.
+
+    """
 
     def __init_subclass__(cls, **kwargs: dict[Any, Any]) -> None:
         super().__init_subclass__(**kwargs)
@@ -25,6 +34,19 @@ class Configurable(ABC):
 
 
 class Module(Configurable, ABC):
+    """An abstract class for creating an OpenPlaceHolder module.
+
+    A module is a ``Configurable`` class that performs calculations
+    according to immutable configuration settings. The initializer
+    checks that the passed configuration is compatible with the module
+    at runtime, as specified by the ``_config`` attribute required by
+    ``Configurable``.
+
+    ``Module`` also defines the ``_setup`` abstract method. This
+    should take the place of the initializer when implementing new
+    modules.
+
+    """
 
     def __init__(self, config: ConfigBase):
         self._check_config_type(config)
