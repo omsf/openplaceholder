@@ -1,7 +1,9 @@
 from dataclasses import dataclass, field, fields
+from itertools import combinations
 from typing import Any
 
 import numpy as np
+from scipy.optimize import LinearConstraint, milp
 
 import openplaceholder.impl.selector.objectives  # noqa: F401  (populate registry)
 from openplaceholder.core.loader import resolve_config_type
@@ -52,8 +54,19 @@ class MPOSelector(Selector):
         params = {k: v for k, v in settings.items() if k != "weight"}
         return cls(config=config_type(**params))
 
+    # _optimize is a MILP with O(n^2) binary variables; past this pool size it
+    # routinely fails to converge within a reasonable time (benchmarked: solves
+    # in ~1s up to n=36, but n=40+ can take 20s+ depending on how tied the
+    # candidates' scores are, especially with >3 candidates per ligand).
+    _MAX_POOL_SIZE = 40
+
     def _select(self, structures: list[StructureSet]) -> list[Structure]:
         pool, groups = self._flatten(structures)
+        if len(pool) > self._MAX_POOL_SIZE:
+            raise NotImplementedError(
+                f"MPOSelector cannot optimize over {len(pool)} candidate structures "
+                f"(limit: {self._MAX_POOL_SIZE}); the MILP becomes intractably slow beyond this size."
+            )
         combined = self._combine(pool)
         chosen = self._optimize(combined, groups)
         return [pool[i] for i in chosen]
@@ -87,5 +100,55 @@ class MPOSelector(Selector):
 
     def _optimize(self, matrix: np.ndarray, groups: list[list[int]]) -> list[int]:
         """Pick one structure index per ligand group, maximizing the combined
-        pairwise score across the selected combination."""
-        raise NotImplementedError
+        pairwise score across the selected combination.
+
+        This is a quadratic assignment problem, so it's posed as a MILP: one
+        binary "chosen" variable per structure, plus one per pair encoding
+        "both endpoints chosen" so the pairwise scores can enter the
+        objective linearly.
+        """
+        n = matrix.shape[0]
+        pairs = list(combinations(range(n), 2))
+
+        objective = self._pair_objective(matrix, pairs, n)
+        constraints = [
+            self._one_per_group_constraint(groups, n, len(pairs)),
+            self._pair_linearization_constraints(pairs, n),
+        ]
+
+        result = milp(objective, constraints=constraints, integrality=1, bounds=(0, 1))
+        if not result.success:
+            raise RuntimeError(f"selection optimization failed: {result.message}")
+
+        return np.flatnonzero(np.round(result.x[:n])).tolist()
+
+    @staticmethod
+    def _pair_objective(matrix: np.ndarray, pairs: list[tuple[int, int]], n: int) -> np.ndarray:
+        """milp minimizes, so negate the pairwise scores to maximize them."""
+        c = np.zeros(n + len(pairs))
+        for k, (i, j) in enumerate(pairs):
+            c[n + k] = -matrix[i, j]
+        return c
+
+    @staticmethod
+    def _one_per_group_constraint(groups: list[list[int]], n: int, n_pairs: int) -> LinearConstraint:
+        """Exactly one structure chosen per ligand group."""
+        rows = np.zeros((len(groups), n + n_pairs))
+        for g, group in enumerate(groups):
+            rows[g, group] = 1
+        return LinearConstraint(rows, lb=1, ub=1)
+
+    @staticmethod
+    def _pair_linearization_constraints(pairs: list[tuple[int, int]], n: int) -> LinearConstraint:
+        """Enforce y_ij == x_i AND x_j for binary x_i, x_j via:
+        y_ij <= x_i, y_ij <= x_j, y_ij >= x_i + x_j - 1.
+        """
+        rows = np.zeros((3 * len(pairs), n + len(pairs)))
+        ub = np.zeros(3 * len(pairs))
+        for k, (i, j) in enumerate(pairs):
+            y = n + k
+            rows[3 * k, [y, i]] = [1, -1]
+            rows[3 * k + 1, [y, j]] = [1, -1]
+            rows[3 * k + 2, [y, i, j]] = [-1, 1, 1]
+            ub[3 * k + 2] = 1
+        return LinearConstraint(rows, lb=-np.inf, ub=ub)
