@@ -1,6 +1,7 @@
 import base64
 import json
 import random
+import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -182,18 +183,36 @@ experiment_settings:
                 except ValueError:
                     continue
 
+                raw = output_file.read_bytes()
+                if structure_format == StructureFormat.MMCIF:
+                    raw = self._rename_ligand_residue(raw, query_name)
+
                 structure_params = dict(
                     sequence=self._config.sequence,
                     ligand_smiles=ligand_smiles,
                     ligand_name=query_name,
-                    structure_format=StructureFormat.from_suffix(output_file.suffix),
-                    structure_data=base64.b64encode(output_file.read_bytes()).decode(),
+                    structure_format=structure_format,
+                    structure_data=base64.b64encode(raw).decode(),
                 )
 
                 structures.append(Structure(**structure_params))
             artifact = StructureGeneratorArtifact.from_structures(structures)
             artifacts.append(artifact)
         return artifacts
+
+    @staticmethod
+    def _rename_ligand_residue(raw: bytes, ligand_name: str) -> bytes:
+        """Rewrite OpenFold3's generic ligand residue name to `ligand_name`.
+
+        Each of our queries has exactly one ligand chain, so OpenFold3 always
+        assigns it component ID "LIG0" (see ``smiles_to_comp_id`` in
+        ``openfold3.core.data.primitives.structure.query``, which enumerates
+        per-query unique ligand SMILES starting at 0). Structure.ligand_name
+        is otherwise relied on as the queryable residue name (e.g.
+        ``select_atoms(f"resname {ligand_name}")`` in validators), so it must
+        match what's actually embedded in the structure data.
+        """
+        return re.sub(rb"\bLIG0\b", ligand_name.encode(), raw)
 
     def _build_subprocess_command(self) -> list[str]:
         exe = cast(str, self._config.run_openfold_path)

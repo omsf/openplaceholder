@@ -1,6 +1,7 @@
 # python bytecode
 *.pyc
 __pycache__/
+*.egg-info/
 
 # pixi environments
 .pixi/*

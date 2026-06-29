@@ -67,6 +67,9 @@ class Structure(JSONSerializable):
             case StructureFormat.PDB:
                 stream = io.StringIO(self.decode_structure_data().decode())
                 topology_format = "pdb"
+            case StructureFormat.MMCIF:
+                stream = io.StringIO(self.decode_structure_data().decode())
+                topology_format = "mmcif"
             case _:
                 raise UnsupportedFormatError(
                     f"{self.structure_format} is not supported by MDAnalysis ({mda.__version__})."
