@@ -128,7 +128,28 @@ experiment_settings:
             output = proc.wait()
 
     def _run_openfold_in_process(self) -> None:
-        raise NotImplementedError
+        # mirrors openfold3.run_openfold's `predict` CLI command, calling the
+        # same runner directly instead of shelling out to the CLI.
+        from openfold3.core.config import config_utils
+        from openfold3.entry_points.experiment_runner import InferenceExperimentRunner
+        from openfold3.entry_points.validator import InferenceExperimentConfig
+        from openfold3.projects.of3_all_atom.config.inference_query_format import (
+            InferenceQuerySet,
+        )
+
+        gen_dir = Path(self._config.generator_directory)
+        runner_args = config_utils.load_yaml(gen_dir / "runner.yml")
+        expt_config = InferenceExperimentConfig(**runner_args)
+        expt_runner = InferenceExperimentRunner(
+            expt_config,
+            num_diffusion_samples=self._config.n_diffusion_samples,
+            output_dir=gen_dir / "output",
+        )
+        query_set = InferenceQuerySet.from_json(gen_dir / "queries.json")
+
+        expt_runner.setup()
+        expt_runner.run(query_set)
+        expt_runner.cleanup()
 
     def _package_outputs(self) -> list[StructureGeneratorArtifact]:
 

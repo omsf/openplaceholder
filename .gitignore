@@ -4,4 +4,8 @@ __pycache__/
 
 # pixi environments
 .pixi/*
+pixi.lock
 !.pixi/config.toml
+
+# inference trace files
+*.a3m
