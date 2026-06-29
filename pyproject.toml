@@ -89,6 +89,9 @@ python = "3.13.*"
 [tool.pixi.feature.py314.dependencies]
 python = "3.14.*"
 
+[tool.pixi.feature.mmcif-pr.dependencies]
+gemmi = ">=0.7.3"
+
 [tool.pixi.environments]
 default = { solve-group = "default" }
 dev = { features = ["dev"], solve-group = "default" }
@@ -97,3 +100,11 @@ test = { features = ["test"], solve-group = "default" }
 py312 = { features = ["test", "py312"], solve-group = "py312" }
 py313 = { features = ["test", "py313"], solve-group = "py313" }
 py314 = { features = ["test", "py314"], solve-group = "py314" }
+# local-testing only: overrides MDAnalysis with an unmerged PR branch
+# (https://github.com/MDAnalysis/mdanalysis/pull/4712) adding MMCIF support,
+# pinned to a specific commit rather than the branch head. Can remove once PR
+# is merged.
+mmcif-pr = { features = ["test", "py312", "mmcif-pr"] }
+
+[dependency-groups]
+mmcif-pr = ["mdanalysis @ git+https://github.com/marinegor/mdanalysis.git@39bd4650f23e0a150948565f82afc2d669646103?rev_type=rev#subdirectory=package"]
