@@ -1,13 +1,10 @@
 from unittest import TestCase
 
-from openplaceholder.impl.selectors import (
-    CoordinationSelector,
-    CoordinationSelectorConfig,
-)
+from openplaceholder.impl.selector.mpo import MPOSelector, MPOSelectorConfig
 
 
-class TestCoordinationSelector(TestCase):
+class TestMPOSelector(TestCase):
 
     def test_init(self) -> None:
-        config = CoordinationSelectorConfig()
-        CoordinationSelector(config)
+        config = MPOSelectorConfig(objectives={})
+        MPOSelector(config)

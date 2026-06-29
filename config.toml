@@ -27,11 +27,12 @@ path = "./archive.json"
 implementation = "openplaceholder.impl.validators:PosebustersValidator"
 
 [selection.selector]
-implementation = "openplaceholder.impl.selectors:MPOSelector"
+implementation = "openplaceholder.impl.selector.mpo:MPOSelector"
 
-# which selectors to use and their weights
-[selection.selector.MPOSelector]
-metric1 = 1
+# objectives to optimize over, keyed by class name; "weight" sets its weight in
+# the combination, remaining keys are passed to the objective's config
+[selection.selector.objectives]
+VolumeOverlapObjective = { weight = 1.0 }
 
 
 [assembly.transformation]
