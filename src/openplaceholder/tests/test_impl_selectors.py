@@ -15,9 +15,26 @@ class TestMPOSelector(TestCase):
 
     def test_select_raises_when_pool_too_large(self) -> None:
         selector = MPOSelector(MPOSelectorConfig(objectives={}))
-        too_many = StructureSet.from_structures(make_structures(MPOSelector._MAX_POOL_SIZE + 1))
+        too_many = StructureSet.from_structures(make_structures(MPOSelector._MAX_POOL_SIZE_BATCHED + 1))
         with self.assertRaises(NotImplementedError):
             selector.select([too_many])
+
+    def test_optimize_batched_picks_one_per_group_across_batches(self) -> None:
+        selector = MPOSelector(MPOSelectorConfig(objectives={}))
+        selector._MAX_POOL_SIZE = 4  # force 2 groups/batch -> 2 batches below
+
+        # groups [0,1], [2,3], [4,5], [6,7]; best cross-group pair within
+        # batch 1 (groups 0-1) is (0,2), within batch 2 (groups 2-3) is (4,6).
+        n = 8
+        matrix = np.full((n, n), 0.1)
+        np.fill_diagonal(matrix, 1.0)
+        matrix[0, 2] = matrix[2, 0] = 0.9
+        matrix[4, 6] = matrix[6, 4] = 0.9
+
+        groups = [[0, 1], [2, 3], [4, 5], [6, 7]]
+        chosen = selector._optimize_batched(matrix, groups)
+
+        self.assertEqual(sorted(chosen), [0, 2, 4, 6])
 
     def test_optimize_picks_best_cross_group_pair(self) -> None:
         selector = MPOSelector(MPOSelectorConfig(objectives={}))

@@ -57,18 +57,38 @@ class MPOSelector(Selector):
     # _optimize is a MILP with O(n^2) binary variables; past this pool size it
     # routinely fails to converge within a reasonable time (benchmarked: solves
     # in ~1s up to n=36, but n=40+ can take 20s+ depending on how tied the
-    # candidates' scores are, especially with >3 candidates per ligand).
+    # candidates' scores are, especially with >3 candidates per ligand). Above
+    # this, _optimize_batched is used instead -- see its docstring.
     _MAX_POOL_SIZE = 40
+
+    # _optimize_batched still builds the full pairwise matrix and solves one
+    # exact MILP per batch, so it isn't unbounded either; this is a generous
+    # but finite backstop against, e.g., a config bug fanning out millions of
+    # candidates.
+    _MAX_POOL_SIZE_BATCHED = 5000
+
+    # Deliberately smaller than _MAX_POOL_SIZE: that figure is "usually fine
+    # for one solve", but the batched path repeats a solve per batch, so a
+    # batch landing in the occasional slow tail (benchmarked: group sizes >=4
+    # can already take 30s+ right at _MAX_POOL_SIZE) compounds across many
+    # batches. _BATCH_TIME_LIMIT is a hard backstop on top regardless: milp
+    # still returns its best feasible incumbent on timeout (just not
+    # necessarily optimal), which is an acceptable trade for a fallback.
+    _BATCH_SIZE = 24
+    _BATCH_TIME_LIMIT = 10.0
 
     def _select(self, structures: list[StructureSet]) -> list[Structure]:
         pool, groups = self._flatten(structures)
-        if len(pool) > self._MAX_POOL_SIZE:
+        if len(pool) > self._MAX_POOL_SIZE_BATCHED:
             raise NotImplementedError(
                 f"MPOSelector cannot optimize over {len(pool)} candidate structures "
-                f"(limit: {self._MAX_POOL_SIZE}); the MILP becomes intractably slow beyond this size."
+                f"(limit: {self._MAX_POOL_SIZE_BATCHED})."
             )
         combined = self._combine(pool)
-        chosen = self._optimize(combined, groups)
+        if len(pool) <= self._MAX_POOL_SIZE:
+            chosen = self._optimize(combined, groups)
+        else:
+            chosen = self._optimize_batched(combined, groups)
         return [pool[i] for i in chosen]
 
     @staticmethod
@@ -98,7 +118,57 @@ class MPOSelector(Selector):
             combined += weight * objective.matrix(pool)
         return combined
 
-    def _optimize(self, matrix: np.ndarray, groups: list[list[int]]) -> list[int]:
+    def _optimize_batched(self, matrix: np.ndarray, groups: list[list[int]]) -> list[int]:
+        """Fallback for pools too large to optimize jointly (see _MAX_POOL_SIZE).
+
+        Partitions groups into consecutive batches that each fit the exact
+        solver, and solves them in sequence: each batch is optimized exactly
+        given the previous batches' choices as fixed context (their pairwise
+        scores against the current batch enter as a linear bias rather than
+        new y-variables, since a fixed candidate's "chosen" state is a
+        constant, not something this batch's MILP needs to decide).
+
+        This trades global optimality for tractability -- choices already
+        fixed by earlier batches are never revisited -- but keeps every
+        individual solve within the size where the exact MILP is fast.
+        """
+        chosen: list[int] = []
+        for batch_groups in self._batch_groups(groups):
+            batch_indices = [i for group in batch_groups for i in group]
+            local = {pool_index: local_index for local_index, pool_index in enumerate(batch_indices)}
+
+            sub_matrix = matrix[np.ix_(batch_indices, batch_indices)]
+            sub_groups = [[local[i] for i in group] for group in batch_groups]
+            bias = matrix[np.ix_(batch_indices, chosen)].sum(axis=1) if chosen else None
+
+            picked = self._optimize(sub_matrix, sub_groups, bias, time_limit=self._BATCH_TIME_LIMIT)
+            chosen += [batch_indices[i] for i in picked]
+        return chosen
+
+    def _batch_groups(self, groups: list[list[int]]) -> list[list[list[int]]]:
+        """Partition groups into consecutive batches, each with a total
+        candidate count at or under _BATCH_SIZE (a single oversized group
+        still gets its own batch, exceeding the limit, rather than being split)."""
+        batches: list[list[list[int]]] = []
+        batch: list[list[int]] = []
+        batch_size = 0
+        for group in groups:
+            if batch and batch_size + len(group) > self._BATCH_SIZE:
+                batches.append(batch)
+                batch, batch_size = [], 0
+            batch.append(group)
+            batch_size += len(group)
+        if batch:
+            batches.append(batch)
+        return batches
+
+    def _optimize(
+        self,
+        matrix: np.ndarray,
+        groups: list[list[int]],
+        bias: np.ndarray | None = None,
+        time_limit: float | None = None,
+    ) -> list[int]:
         """Pick one structure index per ligand group, maximizing the combined
         pairwise score across the selected combination.
 
@@ -106,26 +176,41 @@ class MPOSelector(Selector):
         binary "chosen" variable per structure, plus one per pair encoding
         "both endpoints chosen" so the pairwise scores can enter the
         objective linearly.
+
+        ``bias[i]``, if given, is added to candidate ``i``'s linear
+        coefficient directly -- used by ``_optimize_batched`` to account for
+        pairwise scores against already-fixed choices from earlier batches,
+        without needing new y-variables for those (fixed, not chosen) pairs.
+
+        ``time_limit``, if given, caps the solve; milp still returns its best
+        feasible incumbent when the limit is hit (just not necessarily
+        proven optimal), which ``_optimize_batched`` accepts as a fallback
+        rather than treating as a failure.
         """
         n = matrix.shape[0]
         pairs = list(combinations(range(n), 2))
 
-        objective = self._pair_objective(matrix, pairs, n)
+        objective = self._pair_objective(matrix, pairs, n, bias)
         constraints = [
             self._one_per_group_constraint(groups, n, len(pairs)),
             self._pair_linearization_constraints(pairs, n),
         ]
+        options = {"time_limit": time_limit} if time_limit is not None else None
 
-        result = milp(objective, constraints=constraints, integrality=1, bounds=(0, 1))
-        if not result.success:
+        result = milp(objective, constraints=constraints, integrality=1, bounds=(0, 1), options=options)
+        if result.x is None:
             raise RuntimeError(f"selection optimization failed: {result.message}")
 
         return np.flatnonzero(np.round(result.x[:n])).tolist()
 
     @staticmethod
-    def _pair_objective(matrix: np.ndarray, pairs: list[tuple[int, int]], n: int) -> np.ndarray:
-        """milp minimizes, so negate the pairwise scores to maximize them."""
+    def _pair_objective(
+        matrix: np.ndarray, pairs: list[tuple[int, int]], n: int, bias: np.ndarray | None = None
+    ) -> np.ndarray:
+        """milp minimizes, so negate the pairwise scores (and bias) to maximize them."""
         c = np.zeros(n + len(pairs))
+        if bias is not None:
+            c[:n] = -bias
         for k, (i, j) in enumerate(pairs):
             c[n + k] = -matrix[i, j]
         return c

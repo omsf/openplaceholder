@@ -34,6 +34,15 @@ class IFPSimilarityObjective(Objective):
 
     _config: IFPSimilarityObjectiveConfig
 
+    def __init__(self, config: IFPSimilarityObjectiveConfig):
+        super().__init__(config)
+        # matrix() calls score() once per *pair*, but each side's contact set
+        # only depends on that one structure; caching keeps the expensive
+        # PDB-round-trip + ProLIF fingerprinting to one call per structure
+        # (O(n)) rather than one per pair (O(n^2)) -- the difference between
+        # tractable and not once the pool gets into the hundreds/thousands.
+        self._contacts_cache: dict[Structure, set[tuple[str, str]]] = {}
+
     def score(self, a: Structure, b: Structure) -> float:
         contacts_a = self._contacts(a)
         contacts_b = self._contacts(b)
@@ -42,6 +51,11 @@ class IFPSimilarityObjective(Objective):
         return len(contacts_a & contacts_b) / len(contacts_a | contacts_b)
 
     def _contacts(self, structure: Structure) -> set[tuple[str, str]]:
+        if structure not in self._contacts_cache:
+            self._contacts_cache[structure] = self._compute_contacts(structure)
+        return self._contacts_cache[structure]
+
+    def _compute_contacts(self, structure: Structure) -> set[tuple[str, str]]:
         ligand = Molecule.from_rdkit(structure.to_rdkit_ligand_mol())
         protein = Molecule.from_rdkit(self._protein_mol(structure))
 

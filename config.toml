@@ -26,6 +26,9 @@ path = "./archive.json"
 [[selection.validators]]
 implementation = "openplaceholder.impl.validators:PosebustersValidator"
 
+[[selection.validators]]
+implementation = "openplaceholder.impl.validators:StereoValidator"
+
 [selection.selector]
 implementation = "openplaceholder.impl.selector.mpo:MPOSelector"
 

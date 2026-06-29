@@ -22,14 +22,25 @@ class VolumeOverlapObjective(Objective):
 
     _config: VolumeOverlapObjectiveConfig
 
+    def __init__(self, config: VolumeOverlapObjectiveConfig):
+        super().__init__(config)
+        # matrix() calls score() once per *pair*; caching each structure's
+        # hull keeps that one-time cost to O(n) rather than O(n^2).
+        self._hull_cache: dict[Structure, ConvexHull] = {}
+
     def score(self, a: Structure, b: Structure) -> float:
         """Jaccard overlap (intersection / union) of the two ligands' convex hull volumes."""
-        hull_a = ConvexHull(self._ligand_coords(a))
-        hull_b = ConvexHull(self._ligand_coords(b))
+        hull_a = self._hull(a)
+        hull_b = self._hull(b)
 
         intersection = self._intersection_volume(hull_a, hull_b)
         union = hull_a.volume + hull_b.volume - intersection
         return intersection / union if union > 0 else 0.0
+
+    def _hull(self, structure: Structure) -> ConvexHull:
+        if structure not in self._hull_cache:
+            self._hull_cache[structure] = ConvexHull(self._ligand_coords(structure))
+        return self._hull_cache[structure]
 
     @staticmethod
     def _ligand_coords(structure: Structure) -> np.ndarray:
