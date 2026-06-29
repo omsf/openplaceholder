@@ -14,5 +14,7 @@ class VolumeOverlapObjectiveConfig(ObjectiveConfig):
 
 class VolumeOverlapObjective(Objective):
 
+    _config: VolumeOverlapObjectiveConfig
+
     def score(self, a: Structure, b: Structure) -> float:
         raise NotImplementedError

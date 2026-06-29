@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 
 from openplaceholder.core.configuration import ConfigBase
 from openplaceholder.core.interface import Module
-from openplaceholder.core.structure.structure import Structure
+from openplaceholder.core.structure import Structure
 
 
 class TransformationConfigBase(ConfigBase): ...
