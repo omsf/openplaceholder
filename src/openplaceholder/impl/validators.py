@@ -31,7 +31,7 @@ class PosebustersValidator(Validator):
         return self._count_violations(structure) <= self._config.max_violations
 
     def _count_violations(self, structure: Structure) -> int:
-        ligand = structure.to_mda_universe().select_atoms(f"resname {structure.ligand_name}").convert_to("RDKIT")
+        ligand = structure.to_rdkit_ligand_mol()
         report = self._buster.bust(mol_pred=ligand)  # can use this later on for granular validation
         violations = 0
         for check, passed in report.iloc[0].items():
@@ -71,37 +71,13 @@ class StereoValidator(Validator):
 
     def _validate_structure(self, structure: Structure) -> bool:
         reference = Chem.MolFromSmiles(structure.ligand_smiles)
-        predicted = self._predicted_mol(structure)
+        predicted = structure.to_rdkit_ligand_mol()
 
         if self._config.require_inchi_match and not self._same_inchi(reference, predicted):
             return False
         if self._config.require_smiles_match and not self._same_smiles(reference, predicted):
             return False
         return True
-
-    def _predicted_mol(self, structure: Structure) -> Chem.Mol:
-        ligand_atoms = structure.to_mda_universe().select_atoms(f"resname {structure.ligand_name}")
-        # assume that the predicted ligands carry no explicit
-        # hydrogens, so force the conversion past that check and
-        # recover the heavy-atom skeleton; bond orders and hydrogens
-        # come from the template below.
-        mol = ligand_atoms.convert_to("RDKIT", force=True)
-        template = Chem.MolFromSmiles(structure.ligand_smiles)
-        mol = Chem.AllChem.AssignBondOrdersFromTemplate(template, mol)  # type: ignore[no-untyped-call]
-
-        # the forced conversion left atoms flagged as radicals with
-        # implicit hydrogens suppressed; clear that so sanitisation
-        # fills valences (and hydrogen counts) from the assigned bond
-        # orders.
-        editable = Chem.RWMol(mol)
-        for atom in editable.GetAtoms():
-            atom.SetNoImplicit(False)
-            atom.SetNumExplicitHs(0)
-            atom.SetNumRadicalElectrons(0)
-        mol = editable.GetMol()
-        Chem.SanitizeMol(mol)
-        Chem.AssignStereochemistryFrom3D(mol)
-        return mol
 
     @staticmethod
     def _same_inchi(mol_a: Chem.Mol, mol_b: Chem.Mol) -> bool:

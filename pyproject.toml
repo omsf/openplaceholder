@@ -76,6 +76,7 @@ platforms = ["linux-64"]
 [tool.pixi.dependencies]
 gufe = "*"
 rdkit = "==2026.3.2"
+prolif = ">=2.2.0,<3"
 
 [tool.pixi.pypi-dependencies]
 openplaceholder = { path = ".", editable = true }
@@ -90,7 +91,17 @@ python = "3.13.*"
 python = "3.14.*"
 
 [tool.pixi.feature.mmcif-pr.dependencies]
+# mirrors the base [project.dependencies]/[tool.pixi.dependencies] minus
+# MDAnalysis (overridden via pypi below) and prolif (which conda-pins an
+# exact MDAnalysis version, conflicting with that override) -- this feature
+# uses no-default-feature so it doesn't inherit those from the base feature.
+gufe = "*"
+rdkit = "==2026.3.2"
+posebusters = "*"
 gemmi = ">=0.7.3"
+
+[tool.pixi.feature.mmcif-pr.pypi-dependencies]
+openplaceholder = { path = ".", editable = true }
 
 [tool.pixi.environments]
 default = { solve-group = "default" }
@@ -104,7 +115,7 @@ py314 = { features = ["test", "py314"], solve-group = "py314" }
 # (https://github.com/MDAnalysis/mdanalysis/pull/4712) adding MMCIF support,
 # pinned to a specific commit rather than the branch head. Can remove once PR
 # is merged.
-mmcif-pr = { features = ["test", "py312", "mmcif-pr"] }
+mmcif-pr = { features = ["test", "py312", "mmcif-pr"], no-default-feature = true }
 
 [dependency-groups]
-mmcif-pr = ["mdanalysis @ git+https://github.com/marinegor/mdanalysis.git@39bd4650f23e0a150948565f82afc2d669646103?rev_type=rev#subdirectory=package"]
+mmcif-pr = ["mdanalysis @ git+https://github.com/marinegor/mdanalysis.git@39bd4650f23e0a150948565f82afc2d669646103?rev_type=rev#subdirectory=package", "prolif>=2.2.0,<3"]
