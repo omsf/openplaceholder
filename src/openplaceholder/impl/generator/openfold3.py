@@ -27,6 +27,9 @@ class OpenFold3GeneratorConfig(StructureGeneratorConfigBase):
     run_openfold_path: str | Path | None = None
     seeds: list[int] | None = None
     clean_up: bool = True
+    # forces aggressive CPU offloading regardless of structure size; only
+    # needed for very large targets that don't fit in GPU memory otherwise.
+    low_mem: bool = False
 
 
 class OpenFold3Generator(StructureGenerator):
@@ -83,7 +86,11 @@ class OpenFold3Generator(StructureGenerator):
         return queries
 
     def _runner_yaml(self) -> str:
-        content = """
+        presets = "    - predict\n"
+        if self._config.low_mem:
+            presets += "    - low_mem\n"
+
+        content = f"""
 msa_computation_settings:
   msa_output_directory: ./msas/
   cleanup_msa_dir: False
@@ -95,9 +102,7 @@ template_preprocessor_settings:
 
 model_update:
   presets:
-    - predict
-    - low_mem
-  custom:
+{presets}  custom:
     settings:
       memory:
         eval:
