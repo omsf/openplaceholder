@@ -41,25 +41,19 @@ class MPOSelector(Selector):
 
     _config: MPOSelectorConfig
 
-    # Pools at or below this size are solved in one exact MILP.  Above it the
-    # solver becomes unreliable in wall time (benchmarked: <1 s up to n≈36;
-    # 20 s+ at n=40+, depending on how tied the scores are), so _optimize_batched
-    # is used instead.
-    _MAX_POOL_SIZE = 40
-
-    # Per-batch candidate limit for _optimize_batched.  Deliberately smaller
-    # than _MAX_POOL_SIZE: the batched path repeats a solve per batch, so a
-    # slow tail at the batch boundary compounds.  _BATCH_TIME_LIMIT is a hard
-    # backstop on top: milp returns its best feasible incumbent on timeout (not
-    # necessarily optimal), which is an acceptable trade for a fallback path.
+    # Per-batch candidate limit used by _optimize_batched.  Each batch is solved
+    # as one exact MILP; this is kept conservatively small because the solver's
+    # tail latency at n≈40 can be 30 s+ (benchmarked), and the batched path
+    # runs many solves in sequence so a slow tail compounds.  A group that
+    # exceeds _BATCH_SIZE on its own is not sub-divided -- it forms a single
+    # batch and relies on _BATCH_TIME_LIMIT to stay bounded.
     _BATCH_SIZE = 24
     _BATCH_TIME_LIMIT = 10.0
 
-    # Ceiling beyond which even the batched solver is not attempted.  Building
-    # the full pairwise matrix (objective.matrix) is O(n) in expensive per-structure
-    # work after caching, but the n² cheap comparisons and the solver overhead
-    # still grow; this is a safety backstop against config errors, not a hard
-    # algorithmic limit.
+    # Safety ceiling for the total pool.  Building the full pairwise matrix is
+    # O(n) in expensive per-structure work (after per-structure caching), but
+    # the n² pairwise comparisons and solver overhead still grow; this backstop
+    # guards against config errors rather than marking a hard algorithmic limit.
     _MAX_POOL_SIZE_BATCHED = 5000
 
     def _setup(self) -> None:
@@ -85,10 +79,7 @@ class MPOSelector(Selector):
                 f"the pairwise matrix construction time is acceptable at this scale."
             )
         combined = self._combine(pool)
-        if len(pool) <= self._MAX_POOL_SIZE:
-            chosen = self._optimize(combined, groups)
-        else:
-            chosen = self._optimize_batched(combined, groups)
+        chosen = self._optimize_batched(combined, groups)
         return [pool[i] for i in chosen]
 
     @staticmethod

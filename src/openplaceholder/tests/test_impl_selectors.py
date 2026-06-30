@@ -21,7 +21,7 @@ class TestMPOSelector(TestCase):
 
     def test_optimize_batched_picks_one_per_group_across_batches(self) -> None:
         selector = MPOSelector(MPOSelectorConfig(objectives={}))
-        selector._MAX_POOL_SIZE = 4  # force 2 groups/batch -> 2 batches below
+        selector._BATCH_SIZE = 4  # cap at 4 candidates/batch -> 2 groups/batch -> 2 batches
 
         # groups [0,1], [2,3], [4,5], [6,7]; best cross-group pair within
         # batch 1 (groups 0-1) is (0,2), within batch 2 (groups 2-3) is (4,6).
