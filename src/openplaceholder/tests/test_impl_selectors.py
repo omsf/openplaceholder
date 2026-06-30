@@ -38,7 +38,12 @@ class TestMPOSelector(TestCase):
 
     def test_optimize_picks_best_cross_group_pair(self) -> None:
         selector = MPOSelector(MPOSelectorConfig(objectives={}))
-        # groups [0, 1] and [2, 3]; cross-group pair (0, 2) scores highest.
+        # 4x4 pairwise compatibility matrix over a flat pool of 4 candidate
+        # structures (rows and columns are pool indices 0-3).  Two ligands with
+        # two candidates each: ligand 0 → pool indices [0, 1], ligand 1 → [2, 3].
+        # Entry [i, j] is the score for selecting both candidate i and candidate j;
+        # the highest cross-group score is [0, 2] = 0.9, so the expected selection
+        # is pool index 0 for ligand 0 and pool index 2 for ligand 1.
         matrix = np.array(
             [
                 [1.0, 0.1, 0.9, 0.2],

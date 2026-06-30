@@ -41,6 +41,27 @@ class MPOSelector(Selector):
 
     _config: MPOSelectorConfig
 
+    # Pools at or below this size are solved in one exact MILP.  Above it the
+    # solver becomes unreliable in wall time (benchmarked: <1 s up to n≈36;
+    # 20 s+ at n=40+, depending on how tied the scores are), so _optimize_batched
+    # is used instead.
+    _MAX_POOL_SIZE = 40
+
+    # Per-batch candidate limit for _optimize_batched.  Deliberately smaller
+    # than _MAX_POOL_SIZE: the batched path repeats a solve per batch, so a
+    # slow tail at the batch boundary compounds.  _BATCH_TIME_LIMIT is a hard
+    # backstop on top: milp returns its best feasible incumbent on timeout (not
+    # necessarily optimal), which is an acceptable trade for a fallback path.
+    _BATCH_SIZE = 24
+    _BATCH_TIME_LIMIT = 10.0
+
+    # Ceiling beyond which even the batched solver is not attempted.  Building
+    # the full pairwise matrix (objective.matrix) is O(n) in expensive per-structure
+    # work after caching, but the n² cheap comparisons and the solver overhead
+    # still grow; this is a safety backstop against config errors, not a hard
+    # algorithmic limit.
+    _MAX_POOL_SIZE_BATCHED = 5000
+
     def _setup(self) -> None:
         self._objectives: list[tuple[Objective, float]] = [
             (self._build_objective(name, settings), float(settings.get("weight", 1.0)))
@@ -54,35 +75,14 @@ class MPOSelector(Selector):
         params = {k: v for k, v in settings.items() if k != "weight"}
         return cls(config=config_type(**params))
 
-    # _optimize is a MILP with O(n^2) binary variables; past this pool size it
-    # routinely fails to converge within a reasonable time (benchmarked: solves
-    # in ~1s up to n=36, but n=40+ can take 20s+ depending on how tied the
-    # candidates' scores are, especially with >3 candidates per ligand). Above
-    # this, _optimize_batched is used instead -- see its docstring.
-    _MAX_POOL_SIZE = 40
-
-    # _optimize_batched still builds the full pairwise matrix and solves one
-    # exact MILP per batch, so it isn't unbounded either; this is a generous
-    # but finite backstop against, e.g., a config bug fanning out millions of
-    # candidates.
-    _MAX_POOL_SIZE_BATCHED = 5000
-
-    # Deliberately smaller than _MAX_POOL_SIZE: that figure is "usually fine
-    # for one solve", but the batched path repeats a solve per batch, so a
-    # batch landing in the occasional slow tail (benchmarked: group sizes >=4
-    # can already take 30s+ right at _MAX_POOL_SIZE) compounds across many
-    # batches. _BATCH_TIME_LIMIT is a hard backstop on top regardless: milp
-    # still returns its best feasible incumbent on timeout (just not
-    # necessarily optimal), which is an acceptable trade for a fallback.
-    _BATCH_SIZE = 24
-    _BATCH_TIME_LIMIT = 10.0
-
     def _select(self, structures: list[StructureSet]) -> list[Structure]:
         pool, groups = self._flatten(structures)
         if len(pool) > self._MAX_POOL_SIZE_BATCHED:
             raise NotImplementedError(
-                f"MPOSelector cannot optimize over {len(pool)} candidate structures "
-                f"(limit: {self._MAX_POOL_SIZE_BATCHED})."
+                f"MPOSelector received {len(pool)} candidate structures, which exceeds "
+                f"the current ceiling of {self._MAX_POOL_SIZE_BATCHED}. Reduce the "
+                f"number of candidates per ligand, or raise _MAX_POOL_SIZE_BATCHED if "
+                f"the pairwise matrix construction time is acceptable at this scale."
             )
         combined = self._combine(pool)
         if len(pool) <= self._MAX_POOL_SIZE:
