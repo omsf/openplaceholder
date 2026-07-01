@@ -11,6 +11,9 @@ from typing import Any, Self
 
 import MDAnalysis as mda
 from MDAnalysis import Universe
+from rdkit import Chem
+from rdkit.Chem import AllChem, rdDetermineBonds
+from rdkit.Geometry import Point3D
 
 from openplaceholder.core.serialization import JSONSerializable, to_shallow_dict
 
@@ -67,11 +70,56 @@ class Structure(JSONSerializable):
             case StructureFormat.PDB:
                 stream = io.StringIO(self.decode_structure_data().decode())
                 topology_format = "pdb"
+            case StructureFormat.MMCIF:
+                stream = io.StringIO(self.decode_structure_data().decode())
+                topology_format = "mmcif"
             case _:
                 raise UnsupportedFormatError(
                     f"{self.structure_format} is not supported by MDAnalysis ({mda.__version__})."
                 )
         return mda.Universe(stream, topology_format=topology_format)
+
+    def to_rdkit_ligand_mol(self) -> Chem.Mol:
+        """Build an RDKit Mol for the ligand, with bond orders and
+        stereochemistry assigned from ``ligand_smiles`` and 3D coordinates
+        taken from the structure.
+
+        Atoms and positions are read directly from MDAnalysis rather than
+        via ``AtomGroup.convert_to("RDKIT")``: that path guesses bonds from
+        atom *names*, which fails for predicted ligands (generic atom names
+        like "C11"/"CL1" aren't recognized as element symbols) and requires
+        explicit hydrogens. Connectivity instead comes from RDKit's own
+        distance-based ``DetermineConnectivity``, which only needs elements
+        and 3D coordinates.
+        """
+        ligand = self.to_mda_universe().select_atoms(f"resname {self.ligand_name}")
+
+        editable = Chem.RWMol()
+        conformer = Chem.Conformer(len(ligand))
+        for i, atom in enumerate(ligand):
+            editable.AddAtom(Chem.Atom(atom.element))
+            conformer.SetAtomPosition(i, Point3D(*atom.position.astype(float)))
+        editable.AddConformer(conformer)
+
+        mol = editable.GetMol()
+        rdDetermineBonds.DetermineConnectivity(mol)
+
+        template = Chem.MolFromSmiles(self.ligand_smiles)
+        mol = AllChem.AssignBondOrdersFromTemplate(template, mol)  # type: ignore[no-untyped-call]
+
+        # bonds were just (re)assigned from the template, so implicit-H/radical
+        # bookkeeping left over from the bond-free starting point is stale;
+        # clear it so sanitization fills valences (and hydrogen counts) from
+        # the now-correct bond orders.
+        editable = Chem.RWMol(mol)
+        for mol_atom in editable.GetAtoms():
+            mol_atom.SetNoImplicit(False)
+            mol_atom.SetNumExplicitHs(0)
+            mol_atom.SetNumRadicalElectrons(0)
+        mol = editable.GetMol()
+        Chem.SanitizeMol(mol)
+        Chem.AssignStereochemistryFrom3D(mol)
+        return mol
 
     def to_dict(self) -> dict[Any, Any]:
         return to_shallow_dict(self)

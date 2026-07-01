@@ -47,8 +47,7 @@ def load_json(path: str | Path) -> dict[str, Any]:
 def resolve_pipeline(path: str | Path) -> Pipeline:
     raw = load_toml(path)
 
-    generator_table = raw["generator"]
-    generator = _build_plugin(raw["generator"])
+    generator = _build_plugin(raw["generation"]["generator"])
 
     selection_table = raw["selection"]
     validators = [_build_plugin(v) for v in selection_table.get("validators", [])]

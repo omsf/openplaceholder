@@ -26,6 +26,9 @@ path = "./archive.json"
 [[selection.validators]]
 implementation = "openplaceholder.impl.validators:PosebustersValidator"
 
+[[selection.validators]]
+implementation = "openplaceholder.impl.validators:StereoValidator"
+
 [selection.selector]
 implementation = "openplaceholder.impl.selector.mpo:MPOSelector"
 
@@ -33,6 +36,7 @@ implementation = "openplaceholder.impl.selector.mpo:MPOSelector"
 # the combination, remaining keys are passed to the objective's config
 [selection.selector.objectives]
 VolumeOverlapObjective = { weight = 1.0 }
+IFPSimilarityObjective = { weight = 1.0 }
 
 
 [assembly.transformation]

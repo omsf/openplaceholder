@@ -1,7 +1,12 @@
 # python bytecode
 *.pyc
 __pycache__/
+*.egg-info/
 
 # pixi environments
 .pixi/*
+pixi.lock
 !.pixi/config.toml
+
+# inference trace files
+*.a3m
