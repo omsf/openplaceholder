@@ -86,6 +86,14 @@ pdb2pqr = "*"
 
 [tool.pixi.pypi-dependencies]
 openplaceholder = { path = ".", editable = true }
+# the durrantlab dimorphite-dl rewrite (protonate_smiles API) is PyPI-only;
+# conda-forge ships a different, older lineage. Its rdkit<2026 cap is a
+# conservative upper bound (verified working with rdkit 2026.3.2), relaxed
+# via the override below.
+dimorphite-dl = "==2.0.2"
+
+[tool.pixi.pypi-options.dependency-overrides]
+rdkit = ">=2020.3.3"
 
 [tool.pixi.feature.py312.dependencies]
 python = "3.12.*"

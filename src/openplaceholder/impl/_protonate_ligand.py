@@ -1,0 +1,528 @@
+# mypy: ignore-errors
+"""pH-aware ligand protonation, excised from PatWalters/protonate_utils.
+
+Ligand-mode functions lifted verbatim from
+https://github.com/PatWalters/protonate_utils (v0.1.3, single-module
+``protonate_utils.py``) so we depend only on ``dimorphite-dl`` rather than
+the full package (whose protein path also needs biotite/hydride).
+
+The entry point used by openplaceholder is ``protonate_molecule(mol, ph)``.
+
+Original code is MIT licensed:
+
+    MIT License
+    Copyright (c) 2026 Patrick Walters
+
+    Permission is hereby granted, free of charge, to any person obtaining a
+    copy of this software and associated documentation files (the "Software"),
+    to deal in the Software without restriction. The Software is provided
+    "as is", without warranty of any kind. See the upstream LICENSE for the
+    full text.
+"""
+
+
+def _skeleton_copy(mol):
+    """
+    Return a charge- and H-agnostic copy of `mol` for use as a
+    substructure-match template that aligns two molecules differing only in
+    protonation state (an input molecule against a Dimorphite-DL microstate of
+    itself).
+
+    Bond orders and aromaticity are preserved -- they are what distinguishes,
+    say, an amidine's ``=N`` from its ``-N``, so flattening them would let the
+    charge/H mapping land on the wrong nitrogen and blow up its valence.
+    Only formal charges, explicit Hs and radicals are cleared, and implicit
+    Hs are switched off so a neutralized cation can't overflow its valence.
+
+    Crucially we do *not* run a full sanitize: re-kekulizing a neutralized
+    aromatic cation such as a protonated pyridinium ``[nH+]`` is what made the
+    indazole/imidazole molecules fail. The molecule keeps the aromaticity
+    perceived at parse time, and a light property-cache/ring refresh is all
+    substructure matching needs, so this never raises.
+    """
+    from rdkit import Chem
+
+    m = Chem.RWMol(mol)
+    for a in m.GetAtoms():
+        a.SetFormalCharge(0)
+        a.SetNumExplicitHs(0)
+        a.SetNoImplicit(True)
+        a.SetNumRadicalElectrons(0)
+    m.UpdatePropertyCache(strict=False)
+    Chem.FastFindRings(m)
+    return m
+
+
+def _is_amide_nitrogen(n_atom):
+    """
+    True if `n_atom` is a (thio)carboxamide nitrogen -- bonded to a carbon
+    that bears a double bond to O or S -- and *not* also bonded to a sulfonyl
+    group. A plain carboxamide N-H has pKa ~17-22 and stays neutral at
+    physiological pH, but an (acyl)sulfonamide N-H is genuinely acidic, so we
+    exclude that case (the caller treats its deprotonation as legitimate).
+    """
+    from rdkit import Chem
+
+    has_carbonyl = False
+    has_sulfonyl = False
+    for nbr in n_atom.GetNeighbors():
+        z = nbr.GetAtomicNum()
+        if z == 6:
+            for b in nbr.GetBonds():
+                other = b.GetOtherAtom(nbr)
+                if b.GetBondType() == Chem.BondType.DOUBLE and other.GetAtomicNum() in (8, 16):
+                    has_carbonyl = True
+        elif z == 16:
+            # Sulfonyl S(=O)(=O) neighbour -> acidic (acyl)sulfonamide.
+            o_doubles = sum(
+                1
+                for b in nbr.GetBonds()
+                if b.GetBondType() == Chem.BondType.DOUBLE and b.GetOtherAtom(nbr).GetAtomicNum() == 8
+            )
+            if o_doubles >= 2:
+                has_sulfonyl = True
+    return has_carbonyl and not has_sulfonyl
+
+
+def _nitrogen_is_acylated_or_sulfonylated(n_atom):
+    """
+    True if `n_atom` is bonded to a carbonyl/thiocarbonyl carbon or a sulfonyl
+    sulfur. Such a nitrogen (amide, imide, sulfonamide, N-acylsulfonamide) has
+    its lone pair tied up by the adjacent electron-withdrawing group and is not
+    basic, so it must never be *protonated* at physiological pH -- even the
+    acidic acylsulfonamide/imide cases, which `_is_amide_nitrogen` deliberately
+    excludes so their *deprotonation* stays allowed.
+    """
+    from rdkit import Chem
+
+    for nbr in n_atom.GetNeighbors():
+        z = nbr.GetAtomicNum()
+        if z == 6:
+            for b in nbr.GetBonds():
+                other = b.GetOtherAtom(nbr)
+                if b.GetBondType() == Chem.BondType.DOUBLE and other.GetAtomicNum() in (8, 16):
+                    return True
+        elif z == 16:
+            o_doubles = sum(
+                1
+                for b in nbr.GetBonds()
+                if b.GetBondType() == Chem.BondType.DOUBLE and b.GetOtherAtom(nbr).GetAtomicNum() == 8
+            )
+            if o_doubles >= 2:
+                return True
+    return False
+
+
+def _is_aromatic_amine_nitrogen(n_atom):
+    """
+    True if `n_atom` is an aniline/aromatic-amine nitrogen -- a non-aromatic N
+    bonded directly to an aromatic ring atom -- whose lone pair is delocalised
+    into the ring. Such nitrogens are weak bases (aniline pKaH ~4.6;
+    amino-pyridines/-pyrimidines/-azines pKaH ~3-5) and stay essentially neutral
+    at pH 7.4, yet Dimorphite-DL still enumerates a protonated microstate for
+    them.
+
+    An *aliphatic* amine (no aromatic neighbour) and the C=N nitrogens of an
+    amidine/guanidine/benzamidine (whose neighbouring carbon is not itself
+    aromatic) are excluded here, so they remain protonatable. Strongly-basic
+    amino-heteroarenes (e.g. 2-aminoimidazole, 4-aminopyridine) protonate on
+    their *ring* nitrogen, a different atom, so this exclusion does not affect
+    them.
+    """
+    if n_atom.GetAtomicNum() != 7 or n_atom.GetIsAromatic():
+        return False
+    if _is_amide_nitrogen(n_atom):
+        return False
+    return any(nbr.GetIsAromatic() for nbr in n_atom.GetNeighbors())
+
+
+def _is_cyanamide_nitrogen(n_atom):
+    """
+    True if `n_atom` is a cyanamide nitrogen -- bonded to a nitrile carbon
+    (N-C#N). The triple-bonded nitrile is strongly electron-withdrawing and
+    ties up the nitrogen lone pair, so a dialkylcyanamide has pKaH ~0 (cyanamide
+    itself is faintly *acidic*, pKa ~10) and is non-basic at pH 7.4. Dimorphite-DL
+    nonetheless enumerates a protonated microstate for it, which we must reject.
+    """
+    from rdkit import Chem
+
+    if n_atom.GetAtomicNum() != 7:
+        return False
+    for nbr in n_atom.GetNeighbors():
+        if nbr.GetAtomicNum() != 6:
+            continue
+        for b in nbr.GetBonds():
+            other = b.GetOtherAtom(nbr)
+            if (
+                b.GetBondType() == Chem.BondType.TRIPLE
+                and other.GetAtomicNum() == 7
+                and other.GetIdx() != n_atom.GetIdx()
+            ):
+                return True
+    return False
+
+
+def _bonded_to_acidifying_centre(atom):
+    """
+    True if `atom` is bonded to an electron-withdrawing centre that makes an
+    O-H/S-H on it a strong acid (pKa < ~7): a carbonyl/thiocarbonyl carbon
+    (carboxyl/thioacid), a phosphorus oxyacid, or a sulfur oxyacid. Used to
+    tell a genuine acid (carboxyl pKa ~4, sulfonic <2, phosphate ~1-7) apart
+    from a weak one whose conjugate base is essentially absent at pH 7.4.
+    """
+    from rdkit import Chem
+
+    for nbr in atom.GetNeighbors():
+        z = nbr.GetAtomicNum()
+        if z in (15, 16):
+            # Phosphorus oxyacid, or sulfonic/sulfinic acid: the neighbouring
+            # P/S bears at least one double-bonded oxygen.
+            if any(
+                b.GetBondType() == Chem.BondType.DOUBLE and b.GetOtherAtom(nbr).GetAtomicNum() == 8
+                for b in nbr.GetBonds()
+            ):
+                return True
+        elif z == 6:
+            # Carbonyl/thiocarbonyl carbon -> carboxyl / thioacid.
+            for b in nbr.GetBonds():
+                other = b.GetOtherAtom(nbr)
+                if b.GetBondType() == Chem.BondType.DOUBLE and other is not atom and other.GetAtomicNum() in (8, 16):
+                    return True
+    return False
+
+
+def _is_acidic_oxygen(o_atom):
+    """
+    True if deprotonating this oxygen's O-H gives an anion that actually exists
+    at pH 7.4 -- i.e. the oxygen of a carboxyl, sulfonic/sulfinic, or
+    phosphorus oxyacid (pKa < ~7). A phenol (O on an aromatic carbon, pKa ~10),
+    an alcohol (O on sp3 carbon, pKa ~16), or a hydroxy-heteroarene (really a
+    neutral lactam tautomer) is >90% neutral at physiological pH, yet
+    Dimorphite-DL still enumerates its ``[O-]`` microstate, so those must be
+    rejected -- the acid-side analogue of the weak amide/azole N-H.
+    """
+    return o_atom.GetAtomicNum() == 8 and _bonded_to_acidifying_centre(o_atom)
+
+
+def _is_acidic_sulfur(s_atom):
+    """
+    True if deprotonating this sulfur's S-H gives a thiolate present at pH 7.4
+    -- a thioacid S adjacent to a carbonyl (pKa ~3) or a sulfur/phosphorus
+    oxyacid. A plain alkyl thiol (pKa ~10.5) or aromatic thiol/thione (pKa ~7,
+    e.g. a mercaptoazole) is predominantly neutral, so its Dimorphite-enumerated
+    ``[S-]`` microstate is rejected.
+    """
+    return s_atom.GetAtomicNum() == 16 and _bonded_to_acidifying_centre(s_atom)
+
+
+def _is_acidic_aromatic_nitrogen(n_atom):
+    """
+    True if `n_atom` is an aromatic ring N-H acidic enough to deprotonate near
+    physiological pH. In practice that means only tetrazole-grade azoles,
+    whose ring carries four nitrogens (N-H pKa ~4.9). The common aromatic
+    N-H heterocycles -- pyrrole/indole (1 ring N, pKa ~17), imidazole/pyrazole
+    (2 N, pKa ~14), triazole (3 N, pKa ~10) -- are >99% neutral at pH 7.4, so
+    their Dimorphite-enumerated ``[n-]`` microstates must be rejected.
+    """
+    mol = n_atom.GetOwningMol()
+    ring_info = mol.GetRingInfo()
+    idx = n_atom.GetIdx()
+    most_ring_nitrogens = 0
+    for ring in ring_info.AtomRings():
+        if idx in ring:
+            n_count = sum(1 for i in ring if mol.GetAtomWithIdx(i).GetAtomicNum() == 7)
+            most_ring_nitrogens = max(most_ring_nitrogens, n_count)
+    return most_ring_nitrogens >= 4
+
+
+def _charge_change_is_legitimate(atom, delta_q):
+    """
+    Decide whether changing `atom`'s formal charge by `delta_q` (candidate
+    minus input) reflects a real ionization near physiological pH.
+
+    Protonation to a cation is only sensible on a nitrogen base (amine,
+    amidine, guanidine, aromatic N). Deprotonation to an anion is sensible on a
+    strong oxygen/sulfur acid (carboxyl, sulfonic/sulfinic, phosphate, thioacid)
+    and on a genuinely acidic nitrogen (sulfonamide, tetrazole, ...). It is
+    *not* sensible on the weakly-acidic groups that Dimorphite-DL nonetheless
+    enumerates a deprotonated microstate for: a plain carboxamide (pKa ~17-22)
+    or aromatic N-H heterocycle (imidazole/pyrazole/indazole/indole, pKa
+    ~13-17), nor a phenol (pKa ~10), alcohol (pKa ~16), or plain thiol/thione
+    (pKa ~7-10), all >90% neutral at pH 7.4. Flagging those here lets the
+    selector reject them.
+    """
+    if delta_q > 0:
+        # Protonation to a cation. Only a nitrogen base accepts a proton near
+        # physiological pH. An amide nitrogen is *not* basic (its conjugate
+        # acid pKa is ~0), so reject protonation there even though Dimorphite-DL
+        # enumerates the [NH+] microstate.
+        if atom.GetAtomicNum() != 7:
+            return False
+        if _nitrogen_is_acylated_or_sulfonylated(atom):
+            return False
+        if _is_aromatic_amine_nitrogen(atom):
+            return False
+        if _is_cyanamide_nitrogen(atom):
+            return False
+        return True
+    # delta_q < 0: deprotonation to an anion.
+    z = atom.GetAtomicNum()
+    if z == 8:
+        # Carboxyl/sulfonate/phosphate oxygen deprotonates; phenol/alcohol
+        # (pKa ~10-16) stays neutral at pH 7.4.
+        return _is_acidic_oxygen(atom)
+    if z == 16:
+        # Thioacid sulfur deprotonates; plain thiol/thione stays neutral.
+        return _is_acidic_sulfur(atom)
+    if z == 7:
+        if _is_amide_nitrogen(atom):
+            return False
+        if atom.GetIsAromatic() and not _is_acidic_aromatic_nitrogen(atom):
+            return False
+        return True
+    return False
+
+
+def _count_illegitimate_ionizations(input_mol, cand_mol):
+    """
+    Align `cand_mol` to `input_mol` atom-by-atom -- their heavy-atom
+    skeletons are identical, only protonation differs -- and count the formal
+    charge changes that don't correspond to a legitimate ionization (see
+    `_charge_change_is_legitimate`). Comparing against the input (rather than
+    against neutral) means a charge already present in the input is never
+    penalised; only newly introduced, chemically implausible ionizations are.
+
+    Returns a large sentinel if the two can't be aligned, so such candidates
+    sort last without crashing the selection.
+    """
+    match = _skeleton_copy(input_mol).GetSubstructMatch(_skeleton_copy(cand_mol))
+    if not match or len(match) != cand_mol.GetNumAtoms():
+        return 1_000_000
+
+    bad = 0
+    for cand_idx, input_idx in enumerate(match):
+        ca = cand_mol.GetAtomWithIdx(cand_idx)
+        ia = input_mol.GetAtomWithIdx(input_idx)
+        delta_q = ca.GetFormalCharge() - ia.GetFormalCharge()
+        if delta_q and not _charge_change_is_legitimate(ca, delta_q):
+            bad += 1
+    return bad
+
+
+def _repair_illegitimate_ionizations(input_mol, cand_smiles):
+    """
+    Revert any still-illegitimate ionization in `cand_smiles` to the input's
+    protonation at that atom.
+
+    Selection (`_pick_state`) can only choose among the microstates
+    Dimorphite-DL offers. For an activated-but-not-acidic nitrogen -- an
+    O-alkyl hydroxamate, an acylhydrazide, a plain imide -- Dimorphite may
+    return *only* the deprotonated ``[N-]`` form, with no neutral alternative
+    to pick. Here we align the chosen candidate to the input atom-by-atom and,
+    for every formal-charge change that isn't a legitimate ionization (see
+    `_charge_change_is_legitimate`), copy the input atom's charge and hydrogen
+    count back onto the candidate. Genuine acids handled correctly upstream
+    (carboxyl, sulfonamide, tetrazole, acylsulfonamide) have *legitimate*
+    changes and are left untouched.
+
+    Returns a canonical SMILES, or `cand_smiles` unchanged if the molecules
+    can't be aligned or the repaired structure won't sanitize.
+    """
+    from rdkit import Chem
+
+    if input_mol is None:
+        return cand_smiles
+    cand_mol = Chem.MolFromSmiles(cand_smiles)
+    if cand_mol is None:
+        return cand_smiles
+
+    match = _skeleton_copy(input_mol).GetSubstructMatch(_skeleton_copy(cand_mol))
+    if not match or len(match) != cand_mol.GetNumAtoms():
+        return cand_smiles
+
+    rw = Chem.RWMol(cand_mol)
+    changed = False
+    for cand_idx, input_idx in enumerate(match):
+        ca = rw.GetAtomWithIdx(cand_idx)
+        ia = input_mol.GetAtomWithIdx(input_idx)
+        delta_q = ca.GetFormalCharge() - ia.GetFormalCharge()
+        if delta_q and not _charge_change_is_legitimate(ca, delta_q):
+            ca.SetFormalCharge(ia.GetFormalCharge())
+            ca.SetNumExplicitHs(ia.GetTotalNumHs())
+            ca.SetNoImplicit(True)
+            changed = True
+
+    if not changed:
+        return cand_smiles
+    try:
+        repaired = rw.GetMol()
+        Chem.SanitizeMol(repaired)
+    except Exception:
+        return cand_smiles
+    return Chem.MolToSmiles(repaired)
+
+
+def _pick_state(input_smiles, states):
+    """
+    Choose one microstate from Dimorphite-DL's output deterministically.
+
+    Dimorphite returns every microstate whose pKa falls within the
+    requested pH window. Its list order is not stable across Python
+    runs, so taking `states[0]` makes the pipeline non-deterministic:
+    e.g. a secondary alkyl amide can come back as either NH or N-, and
+    we'd silently flip between them on re-runs.
+
+    Selection happens in two tiers (lower is better):
+
+    1. **Site-by-site plausibility.** Each candidate is aligned to the
+       input atom-by-atom and its formal-charge changes are checked: a
+       cation must form on a nitrogen base, an anion on an O/S acid or a
+       genuinely acidic nitrogen (sulfonamide, tetrazole, ...). Dimorphite
+       also enumerates implausible microstates -- most notably a
+       deprotonated carboxamide ``C(=O)[N-]`` (N-H pKa ~17-22) -- and those
+       are penalised by their count of illegitimate changes, so the neutral
+       amide is kept over its bogus anion.
+
+    2. **Most ionized.** Among equally plausible candidates, prefer the one
+       with the greatest total ionic character (sum of |formal charge|).
+       When dimorphite is unsure it returns both the ionized and the neutral
+       form (a primary amine comes back as both ``CCC[NH3+]`` and ``CCCN``);
+       this keeps the ionized one and, unlike "match the input charge", does
+       not collapse back to a neutral input drawn without explicit charges. A
+       zwitterion (net charge 0 but two charged atoms) is preferred over its
+       neutral form.
+
+    The SMILES string is a final deterministic tiebreak. For groups with
+    pKa far from the pH window dimorphite returns a single state, so the
+    choice only matters when dimorphite is unsure.
+    """
+    from rdkit import Chem
+
+    input_mol = Chem.MolFromSmiles(input_smiles)
+
+    def score(smi):
+        m = Chem.MolFromSmiles(smi)
+        if m is None:
+            # Unparseable candidate: sort strictly last.
+            return (1_000_000, 0, smi)
+        illegitimate = _count_illegitimate_ionizations(input_mol, m) if input_mol is not None else 0
+        ionic = sum(abs(a.GetFormalCharge()) for a in m.GetAtoms())
+        # Fewest implausible ionizations first, then most ionized
+        # (negate for min), then SMILES tiebreak.
+        return (illegitimate, -ionic, smi)
+
+    best = min(states, key=score)
+    # The best available state may still carry an illegitimate ionization when
+    # Dimorphite offered no cleaner alternative; revert those sites to the input.
+    return _repair_illegitimate_ionizations(input_mol, best)
+
+
+def _target_atom_states(mol_heavy, ph):
+    """
+    Use Dimorphite-DL to determine the dominant protonation state at
+    `ph`, then return a dict {atom_idx: (formal_charge, total_num_hs)}
+    aligned to the atom indices of `mol_heavy`.
+
+    Returning the total H count along with the charge is important: for
+    aromatic heterocycles, charge alone underspecifies the atom and
+    RDKit will fail to kekulize after the change. The template's H count
+    fully constrains the bonding state.
+    """
+    from dimorphite_dl import protonate_smiles
+    from rdkit import Chem
+
+    smiles = Chem.MolToSmiles(mol_heavy)
+    states = protonate_smiles(smiles, ph_min=ph - 0.5, ph_max=ph + 0.5)
+    if not states:
+        raise RuntimeError(f"Dimorphite-DL returned no states for {smiles!r}")
+
+    chosen = _pick_state(smiles, states)
+    template = Chem.MolFromSmiles(chosen)
+    if template is None:
+        raise RuntimeError(f"RDKit could not parse Dimorphite-DL output {chosen!r}")
+
+    # Map heavy-atom indices between original and template via a skeleton
+    # (charge/H/bond-order-agnostic) match, so e.g. -COOH still matches -COO-
+    # and protonated aromatic heterocycles still match their neutral form.
+    match = _skeleton_copy(mol_heavy).GetSubstructMatch(_skeleton_copy(template))
+    if not match:
+        raise RuntimeError("Could not align protonation template with input molecule")
+
+    out = {}
+    for template_idx, orig_idx in enumerate(match):
+        ta = template.GetAtomWithIdx(template_idx)
+        out[orig_idx] = (ta.GetFormalCharge(), ta.GetTotalNumHs())
+    return out
+
+
+def protonate_molecule(mol, ph, add_coord_hs=True):
+    """
+    Return a Mol with pH-appropriate protonation.
+
+    When `add_coord_hs` is set (the SDF-output path), explicit hydrogens
+    are added so they appear in the written file. If the input carries a
+    3D conformer they are positioned from the existing geometry while the
+    heavy-atom coordinates are preserved; without coordinates (SMILES
+    input) they are still added explicitly, just without positions.
+    Otherwise (`add_coord_hs` False, the SMILES-output path) protonation
+    is left implicit, which is what a SMILES writer wants and avoids
+    hydrogens at bogus positions.
+    """
+    from rdkit import Chem
+
+    props = mol.GetPropsAsDict()
+    name = mol.GetProp("_Name") if mol.HasProp("_Name") else ""
+
+    # Strip any pre-existing Hs; any conformer on heavy atoms is preserved.
+    mol_heavy = Chem.RemoveHs(mol)
+    has_coords = mol_heavy.GetNumConformers() > 0
+
+    # Apply Dimorphite-DL's pH-appropriate charges and H counts to the
+    # molecule. Setting NoImplicit=True with an explicit H count makes
+    # the atom state fully determined, which keeps kekulization happy on
+    # aromatic heterocycles.
+    new_states = _target_atom_states(mol_heavy, ph)
+    mol_heavy = Chem.RWMol(mol_heavy)
+    for idx, (charge, n_hs) in new_states.items():
+        a = mol_heavy.GetAtomWithIdx(idx)
+        a.SetFormalCharge(charge)
+        a.SetNumExplicitHs(n_hs)
+        a.SetNoImplicit(True)
+    Chem.SanitizeMol(mol_heavy)
+
+    # For SDF output, add explicit hydrogens so they are written to the
+    # file. With 3D coordinates they are positioned from the existing
+    # heavy-atom geometry (heavy-atom coordinates are not modified); with
+    # none (SMILES input) they are added without coordinates. For SMILES
+    # output the caller passes add_coord_hs=False, keeping protonation
+    # implicit so the SMILES writer renders it cleanly.
+    if add_coord_hs:
+        protonated = Chem.AddHs(mol_heavy, addCoords=has_coords)
+    else:
+        protonated = mol_heavy
+
+    # Restore name and SDF tags.
+    if name:
+        protonated.SetProp("_Name", name)
+    for key, value in props.items():
+        protonated.SetProp(key, str(value))
+    return protonated
+
+
+def protonate_smiles_string(smiles, ph=7.4):
+    """
+    Protonate a single SMILES string at `ph` and return the resulting
+    SMILES. Convenience wrapper around `protonate_molecule` for the
+    common string-in/string-out case (no coordinates involved).
+
+    Raises ValueError if `smiles` cannot be parsed; other failures
+    (e.g. Dimorphite-DL could not handle the molecule) propagate from
+    `protonate_molecule`.
+    """
+    from rdkit import Chem
+
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        raise ValueError(f"Could not parse SMILES {smiles!r}")
+    protonated = protonate_molecule(mol, ph, add_coord_hs=False)
+    return Chem.MolToSmiles(protonated)

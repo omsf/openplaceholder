@@ -17,6 +17,7 @@ from openplaceholder.core.assembly.transformation import (
     TransformationConfigBase,
 )
 from openplaceholder.core.structure import Structure, StructureFormat
+from openplaceholder.impl._protonate_ligand import protonate_molecule
 
 # heavy-atom ligand of a complex, robust to truncated residue names
 _LIGAND = "not protein and not element H"
@@ -112,7 +113,7 @@ class MaxVolumeSiteTransformation(Transformation):
             return self._assemble(structure, mda.Universe(str(out_pdb)).atoms, self._ligand_atoms(structure))
 
     def _protonate_ligand(self, structure: Structure) -> Structure:
-        mol = Chem.AddHs(structure.to_rdkit_ligand_mol(selection=_LIGAND), addCoords=True)
+        mol = protonate_molecule(structure.to_rdkit_ligand_mol(selection=_LIGAND), self._config.ph)  # type: ignore[no-untyped-call]
         with tempfile.TemporaryDirectory() as tmp:
             ligand_pdb = Path(tmp) / "ligand.pdb"
             ligand_pdb.write_text(Chem.MolToPDBBlock(mol))
