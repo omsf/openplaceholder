@@ -79,7 +79,7 @@ class Structure(JSONSerializable):
                 )
         return mda.Universe(stream, topology_format=topology_format)
 
-    def to_rdkit_ligand_mol(self) -> Chem.Mol:
+    def to_rdkit_ligand_mol(self, selection: str | None = None) -> Chem.Mol:
         """Build an RDKit Mol for the ligand, with bond orders and
         stereochemistry assigned from ``ligand_smiles`` and 3D coordinates
         taken from the structure.
@@ -91,8 +91,12 @@ class Structure(JSONSerializable):
         explicit hydrogens. Connectivity instead comes from RDKit's own
         distance-based ``DetermineConnectivity``, which only needs elements
         and 3D coordinates.
+
+        ``selection`` overrides the default ``resname``-based atom selection
+        (e.g. ``"not protein and not element H"`` to pick the heavy-atom
+        ligand of a complex whose residue name was truncated on write).
         """
-        ligand = self.to_mda_universe().select_atoms(f"resname {self.ligand_name}")
+        ligand = self.to_mda_universe().select_atoms(selection or f"resname {self.ligand_name}")
 
         editable = Chem.RWMol()
         conformer = Chem.Conformer(len(ligand))
