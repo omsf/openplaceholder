@@ -1,8 +1,9 @@
 """Interaction-fingerprint (IFP) similarity objective: rewards pairs of
 ligand poses whose predicted binding modes make the same protein contacts."""
 
-import io
+import tempfile
 from dataclasses import dataclass
+from pathlib import Path
 
 import MDAnalysis as mda
 from prolif.fingerprint import Fingerprint
@@ -15,8 +16,8 @@ from openplaceholder.core.structure import Structure
 
 @dataclass(frozen=True, eq=True)
 class IFPSimilarityObjectiveConfig(ObjectiveConfig):
-    # which ProLIF interaction types to consider; see prolif.Fingerprint
-    interactions: str = "all"
+    # which ProLIF interaction types to consider; None uses all of them
+    interactions: list[str] | None = None
 
 
 class IFPSimilarityObjective(Objective):
@@ -59,15 +60,15 @@ class IFPSimilarityObjective(Objective):
         ligand = Molecule.from_rdkit(structure.to_rdkit_ligand_mol())
         protein = Molecule.from_rdkit(self._protein_mol(structure))
 
-        fp = Fingerprint(interactions=self._config.interactions)
+        fp = Fingerprint(interactions=self._config.interactions or "all")
         ifp = fp.generate(ligand, protein)
 
-        return {
-            (str(protein_residue), interaction)
-            for (_, protein_residue), present in ifp.items()
-            for interaction, is_present in zip(fp.interactions, present)
-            if is_present
-        }
+        contacts: set[tuple[str, str]] = set()
+        for (_, protein_residue), present in ifp.items():
+            for interaction, is_present in zip(fp.interactions, present):
+                if is_present:
+                    contacts.add((str(protein_residue), interaction))
+        return contacts
 
     @staticmethod
     def _protein_mol(structure: Structure) -> Chem.Mol:
@@ -82,14 +83,14 @@ class IFPSimilarityObjective(Objective):
         """
         protein_atoms = structure.to_mda_universe().select_atoms("protein")
 
-        buffer = io.StringIO()
-        writer = mda.Writer(buffer, format="PDB", n_atoms=len(protein_atoms))
-        writer.write(protein_atoms)
-        # the MMCIF parser's default altLoc value is a literal NUL byte,
-        # which corrupts the fixed-width PDB columns MDAnalysis writes it
-        # into and breaks RDKit's PDB parser after the very first atom.
-        pdb_block = buffer.getvalue().replace("\x00", " ")
-        writer.close()
+        with tempfile.TemporaryDirectory() as tmp:
+            pdb_path = Path(tmp) / "protein.pdb"
+            with mda.Writer(str(pdb_path), n_atoms=len(protein_atoms)) as writer:
+                writer.write(protein_atoms)
+            # the MMCIF parser's default altLoc value is a literal NUL byte,
+            # which corrupts the fixed-width PDB columns MDAnalysis writes it
+            # into and breaks RDKit's PDB parser after the very first atom.
+            pdb_block = pdb_path.read_text().replace("\x00", " ")
 
         mol = Chem.MolFromPDBBlock(pdb_block, sanitize=False, removeHs=False, proximityBonding=True)
         # predicted (not crystallographic) coordinates can have minor local
