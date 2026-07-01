@@ -1,7 +1,7 @@
 """Interaction-fingerprint (IFP) similarity objective: rewards pairs of
 ligand poses whose predicted binding modes make the same protein contacts."""
 
-import tempfile
+import io
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -83,14 +83,13 @@ class IFPSimilarityObjective(Objective):
         """
         protein_atoms = structure.to_mda_universe().select_atoms("protein")
 
-        with tempfile.TemporaryDirectory() as tmp:
-            pdb_path = Path(tmp) / "protein.pdb"
-            with mda.Writer(str(pdb_path), n_atoms=len(protein_atoms)) as writer:
-                writer.write(protein_atoms)
-            # the MMCIF parser's default altLoc value is a literal NUL byte,
+        buffer = io.StringIO()
+        with mda.Writer(buffer, format="PDB", n_atoms=len(protein_atoms)) as writer:
+            writer.write(protein_atoms)
+            # the MMCIF parser's default altLoc value is a literal NULL byte,
             # which corrupts the fixed-width PDB columns MDAnalysis writes it
             # into and breaks RDKit's PDB parser after the very first atom.
-            pdb_block = pdb_path.read_text().replace("\x00", " ")
+            pdb_block = buffer.getvalue().replace("\x00", " ")
 
         mol = Chem.MolFromPDBBlock(pdb_block, sanitize=False, removeHs=False, proximityBonding=True)
         # predicted (not crystallographic) coordinates can have minor local
