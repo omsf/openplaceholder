@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 
 from MDAnalysis.guesser.tables import vdwradii
@@ -6,7 +7,19 @@ from posebusters import PoseBusters
 from rdkit import Chem
 
 from openplaceholder.core.selection.validator import Validator, ValidatorConfigBase
-from openplaceholder.core.structure import Structure
+from openplaceholder.core.structure import LigandPerceptionError, Structure
+
+logger = logging.getLogger(__name__)
+
+
+def _perceive_ligand(structure: Structure) -> Chem.Mol | None:
+    """Reconstruct the ligand mol, or None (with a warning) when a distorted
+    pose can't be perceived -- so validators drop it instead of crashing down the road."""
+    try:
+        return structure.to_rdkit_ligand_mol()
+    except LigandPerceptionError as exc:
+        logger.warning("dropping structure unperceivable by RDKit: %s", exc)
+        return None
 
 
 @dataclass(frozen=True)
@@ -28,10 +41,12 @@ class PosebustersValidator(Validator):
         self._buster = PoseBusters(config="mol")
 
     def _validate_structure(self, structure: Structure) -> bool:
-        return self._count_violations(structure) <= self._config.max_violations
+        ligand = _perceive_ligand(structure)
+        if ligand is None:
+            return False
+        return self._count_violations(ligand) <= self._config.max_violations
 
-    def _count_violations(self, structure: Structure) -> int:
-        ligand = structure.to_rdkit_ligand_mol()
+    def _count_violations(self, ligand: Chem.Mol) -> int:
         report = self._buster.bust(mol_pred=ligand)  # can use this later on for granular validation
         violations = 0
         for check, passed in report.iloc[0].items():
@@ -70,8 +85,10 @@ class StereoValidator(Validator):
         pass
 
     def _validate_structure(self, structure: Structure) -> bool:
+        predicted = _perceive_ligand(structure)
+        if predicted is None:
+            return False
         reference = Chem.MolFromSmiles(structure.ligand_smiles)
-        predicted = structure.to_rdkit_ligand_mol()
 
         if self._config.require_inchi_match and not self._same_inchi(reference, predicted):
             return False

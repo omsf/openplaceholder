@@ -22,6 +22,15 @@ class UnsupportedFormatError(Exception):
     pass
 
 
+class LigandPerceptionError(Exception):
+    """Raised when a ligand cannot be reconstructed from its 3D pose.
+
+    Distance-based bond perception on a distorted predicted pose can yield a
+    connectivity graph that the SMILES template will not map onto; such a pose
+    is chemically unusable and should be filtered out rather than crash a run.
+    """
+
+
 class StructureFormat(StrEnum):
     MMCIF = "MMCIF"
     PDB = "PDB"
@@ -106,23 +115,26 @@ class Structure(JSONSerializable):
         editable.AddConformer(conformer)
 
         mol = editable.GetMol()
-        rdDetermineBonds.DetermineConnectivity(mol)
+        try:
+            rdDetermineBonds.DetermineConnectivity(mol)
 
-        template = Chem.MolFromSmiles(self.ligand_smiles)
-        mol = AllChem.AssignBondOrdersFromTemplate(template, mol)  # type: ignore[no-untyped-call]
+            template = Chem.MolFromSmiles(self.ligand_smiles)
+            mol = AllChem.AssignBondOrdersFromTemplate(template, mol)  # type: ignore[no-untyped-call]
 
-        # bonds were just (re)assigned from the template, so implicit-H/radical
-        # bookkeeping left over from the bond-free starting point is stale;
-        # clear it so sanitization fills valences (and hydrogen counts) from
-        # the now-correct bond orders.
-        editable = Chem.RWMol(mol)
-        for mol_atom in editable.GetAtoms():
-            mol_atom.SetNoImplicit(False)
-            mol_atom.SetNumExplicitHs(0)
-            mol_atom.SetNumRadicalElectrons(0)
-        mol = editable.GetMol()
-        Chem.SanitizeMol(mol)
-        Chem.AssignStereochemistryFrom3D(mol)
+            # bonds were just (re)assigned from the template, so implicit-H/radical
+            # bookkeeping left over from the bond-free starting point is stale;
+            # clear it so sanitization fills valences (and hydrogen counts) from
+            # the now-correct bond orders.
+            editable = Chem.RWMol(mol)
+            for mol_atom in editable.GetAtoms():
+                mol_atom.SetNoImplicit(False)
+                mol_atom.SetNumExplicitHs(0)
+                mol_atom.SetNumRadicalElectrons(0)
+            mol = editable.GetMol()
+            Chem.SanitizeMol(mol)
+            Chem.AssignStereochemistryFrom3D(mol)
+        except (ValueError, Chem.AtomValenceException, Chem.KekulizeException) as exc:
+            raise LigandPerceptionError(f"could not perceive ligand '{self.ligand_name}' from its pose: {exc}") from exc
         return mol
 
     def to_dict(self) -> dict[Any, Any]:
