@@ -6,9 +6,11 @@ license = "MIT"
 license-files = ["LICENSE"]
 authors = [
   {name = "Ian Kenney", email = "ian.kenney@choderalab.org"},
+  {name = "Jenke Scheen", email = "jenke.scheen@omsf.io"},
 ]
 maintainers = [
   {name = "Ian Kenney", email = "ian.kenney@choderalab.org"},
+  {name = "Jenke Scheen", email = "jenke.scheen@omsf.io"},
 ]
 classifiers = [
 	    "Intended Audience :: Science/Research",
