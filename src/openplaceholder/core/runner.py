@@ -18,7 +18,7 @@ def run_serial(pipeline: Pipeline) -> AlchemicalNetwork:
     generator = pipeline.generator
     selector = pipeline.selector
     mapper = pipeline.mapping
-    transformation = pipeline.transformation
+    transformations = pipeline.transformations
 
     structure_sets: list[StructureSet] = []
     for artifact in generator.run():
@@ -34,7 +34,7 @@ def run_serial(pipeline: Pipeline) -> AlchemicalNetwork:
     # full collection rather than per-ligand.
     selected_structures = selector.select(structure_sets)
 
-    if transformation is not None:
+    for transformation in transformations:
         selected_structures = transformation.transform(selected_structures)
 
     # TODO: technically not the last step, but will leave this here for now
