@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -10,6 +11,8 @@ from openplaceholder.impl.generator.archiver import (
     DirectoryArchiver,
     DirectoryArchiverConfig,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -26,6 +29,7 @@ class DirectoryGenerator(StructureGenerator):
         self.validate_inputs()
 
     def _run(self) -> list[StructureGeneratorArtifact]:
+        logger.debug("deferring to DirectoryArchiver for artifact generation")
         return self._archiver.read()
 
     def _validate_inputs(self) -> None:
