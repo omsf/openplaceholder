@@ -12,7 +12,5 @@ class Pipeline:
     generator: StructureGenerator
     validators: list[Validator]
     selector: Selector
-    # TODO: layered transformations? these might be order dependent so
-    # need to be careful
-    transformation: Transformation | None
+    transformations: list[Transformation]
     mapping: Mapper
