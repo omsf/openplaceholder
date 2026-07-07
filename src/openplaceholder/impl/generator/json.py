@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -10,6 +11,8 @@ from openplaceholder.impl.generator.archiver import (
     JSONArchiver,
     JSONArchiverConfig,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -25,6 +28,7 @@ class JSONGenerator(StructureGenerator):
         self._archiver: JSONArchiver = JSONArchiver(JSONArchiverConfig(path=self._config.path))
 
     def _run(self) -> list[StructureGeneratorArtifact]:
+        logger.debug("deferring to JSONArchiver for artifact generation")
         return self._archiver.read()
 
     def _validate_inputs(self) -> None:

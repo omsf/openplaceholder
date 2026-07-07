@@ -1,8 +1,11 @@
+import logging
 from abc import ABC, abstractmethod
 
 from openplaceholder.core.configuration import ConfigBase
 from openplaceholder.core.interface import Module
 from openplaceholder.core.structure import Structure
+
+logger = logging.getLogger(__name__)
 
 
 class ValidatorConfigBase(ConfigBase): ...
@@ -11,6 +14,7 @@ class ValidatorConfigBase(ConfigBase): ...
 class Validator(Module, ABC):
 
     def validate_structures(self, structures: list[Structure]) -> list[Structure]:
+        logger.info("validating structures with %s", self.__class__.__name__)
         _structures = []
         for structure in structures:
             if self._validate_structure(structure):

@@ -1,5 +1,6 @@
 import base64
 import json
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -9,6 +10,8 @@ from openplaceholder.core.generation.generator import (
 )
 from openplaceholder.core.serialization import OPHEncoder, from_json
 from openplaceholder.core.structure import Structure, StructureFormat
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -23,9 +26,11 @@ class DirectoryArchiver(ArtifactArchiver):
 
     def _write(self, artifacts: list[StructureGeneratorArtifact]) -> None:
         root = Path(self._config.path)
+        logger.debug("creating root archive directory: %s", root)
         root.mkdir(parents=True, exist_ok=True)
         for artifact in artifacts:
-            artifact_dir = root / f"{artifact.ligand_name}"
+            logger.debug("achiving structures for ligand %s", artifact.ligand_name)
+            artifact_dir = root / str(artifact.ligand_name)
             artifact_dir.mkdir(exist_ok=True)
             meta = {
                 "sequence": artifact.sequence,
@@ -45,6 +50,7 @@ class DirectoryArchiver(ArtifactArchiver):
             if not (archive_file := artifact_dir / "artifact.json").exists():
                 continue
 
+            logger.debug("loading discovered metadata from %s", archive_file)
             meta = json.loads(archive_file.read_text())
 
             structures: list[Structure] = []
@@ -80,16 +86,20 @@ class JSONArchiver(ArtifactArchiver):
     def _read(self) -> list[StructureGeneratorArtifact]:
         path = Path(self._config.path)
         content = path.read_text()
+        logger.debug("loaded achive data from %s", path)
         decoded = from_json(content)
 
         if not (isinstance(decoded, list) and all(isinstance(v, StructureGeneratorArtifact) for v in decoded)):
+            logger.exception("unable to decode %s", path)
             raise ValueError(decoded)
 
         return decoded
 
     def _write(self, artifacts: list[StructureGeneratorArtifact]) -> None:
         path = Path(self._config.path)
+        logger.debug("dumping json")
         _json = json.dumps(artifacts, cls=OPHEncoder)
+        logger.debug("writing json to %s", path)
         path.write_text(_json)
 
     def _archive_exists(self) -> bool:

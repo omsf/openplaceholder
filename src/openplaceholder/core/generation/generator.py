@@ -1,3 +1,4 @@
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Self
@@ -5,6 +6,8 @@ from typing import Any, Self
 from openplaceholder.core.configuration import ConfigBase
 from openplaceholder.core.interface import Module
 from openplaceholder.core.structure import Structure, StructureSet
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -45,6 +48,7 @@ class ArtifactArchiver(ABC):
         super().__init_subclass__(**kwargs)
         key = f"{cls.__module__}.{cls.__qualname__}"
         _ARCHIVER_REGISTRY[key] = cls
+        logger.debug("registered ArtifactArchiver: %s", str(cls))
 
     @abstractmethod
     def _write(self, artifacts: list["StructureGeneratorArtifact"]) -> None:
@@ -59,9 +63,11 @@ class ArtifactArchiver(ABC):
         raise NotImplementedError
 
     def write(self, artifacts: list["StructureGeneratorArtifact"]) -> None:
+        logger.debug("writing artifacts with %s", self.__class__.__name__)
         return self._write(artifacts)
 
     def read(self) -> list["StructureGeneratorArtifact"]:
+        logger.debug("reading artifacts with %s", self.__class__.__name__)
         return self._read()
 
     def archive_exists(self) -> bool:
@@ -88,8 +94,10 @@ class StructureGenerator(Module, ABC):
         raise NotImplementedError
 
     def run(self) -> list[StructureGeneratorArtifact]:
+        logger.info("running %s", self.__class__.__name__)
         artifacts = self._run()
         return artifacts
 
     def validate_inputs(self) -> None:
+        logger.info("validating %s inputs", self.__class__.__name__)
         self._validate_inputs()
