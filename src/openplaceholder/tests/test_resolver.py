@@ -32,7 +32,7 @@ implementation = "openplaceholder.impl.selector.mpo:MPOSelector"
 [selection.selector.objectives]
 VolumeOverlapObjective = {{ weight = 1.0 }}
 
-[assembly.transformation]
+[[assembly.transformations]]
 implementation = "openplaceholder.impl.transformations:MaxVolumeSiteTransformation"
 
 [assembly.mapping]
@@ -62,5 +62,6 @@ class TestResolvePipeline(TestCase):
             assert isinstance(selector, MPOSelector)
             self.assertIn("VolumeOverlapObjective", selector._config.objectives)
 
-            self.assertIsInstance(pipeline.transformation, MaxVolumeSiteTransformation)
+            self.assertIsInstance(pipeline.transformations, list)
+            self.assertIsInstance(pipeline.transformations[0], MaxVolumeSiteTransformation)
             self.assertIsInstance(pipeline.mapping, LOMAPMapper)

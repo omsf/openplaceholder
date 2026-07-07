@@ -1,5 +1,6 @@
 import base64
 import json
+import logging
 import random
 import re
 import shutil
@@ -16,6 +17,8 @@ from openplaceholder.core.structure import (
     Structure,
     StructureFormat,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -42,33 +45,40 @@ class OpenFold3Generator(StructureGenerator):
 
     def _run(self) -> list[StructureGeneratorArtifact]:
 
+        logger.info("preparing input files for OpenFold3 run")
         self._prepare_openfold_inputs()
 
         # TODO ensure that the checkpoint has been
         # downloaded. Optionally download if not found?
         if self._config.run_openfold_path:
+            logger.debug("running OpenFold3 as a subprocess")
             self._run_openfold_subprocess()
         else:
+            logger.debug("running OpenFold3 in-process")
             self._run_openfold_in_process()
 
+        logger.info("gathering generated structures")
         generator_artifacts = self._package_outputs()
 
         if self._config.clean_up:
+            logger.info("cleaning up OpenFold3 output directory")
             self._clean_up()
 
         return generator_artifacts
 
     def _prepare_openfold_inputs(self) -> None:
         gen_dir = Path(self._config.generator_directory)
+        logger.debug("creating generator directory %s", gen_dir)
         gen_dir.mkdir(exist_ok=True, parents=True)
 
-        query_map: dict[Any, Any] = self._query_map()
-        runner_yaml_content: str = self._runner_yaml()
-
         query_json_path = gen_dir / "queries.json"
-        runner_path = gen_dir / "runner.yml"
-
+        logger.debug("creating %s", query_json_path)
+        query_map: dict[Any, Any] = self._query_map()
         query_json_path.write_text(json.dumps(query_map, indent=4))
+
+        runner_path = gen_dir / "runner.yml"
+        logger.debug("creating %s", runner_path)
+        runner_yaml_content: str = self._runner_yaml()
         runner_path.write_text(runner_yaml_content)
 
     def _query_map(self) -> dict[Any, Any]:

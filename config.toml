@@ -45,7 +45,7 @@ VolumeOverlapObjective = { weight = 1.0 }
 IFPSimilarityObjective = { weight = 1.0 }
 
 
-[assembly.transformation]
+[[assembly.transformations]]
 implementation = "openplaceholder.impl.transformations:MaxVolumeSiteTransformation"
 
 [assembly.mapping]

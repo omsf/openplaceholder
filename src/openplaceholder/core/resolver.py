@@ -54,8 +54,7 @@ def resolve_pipeline(path: str | Path) -> Pipeline:
     selector = _build_plugin(selection_table.get("selector"))
 
     assembly = raw["assembly"]
-    transformation_table = assembly.get("transformation")
-    transformation = _build_plugin(transformation_table) if transformation_table else None
+    transformations = [_build_plugin(t) for t in assembly.get("transformations", [])]
     mapping_table = assembly["mapping"]
     mapping = _build_plugin(mapping_table)
 
@@ -63,6 +62,6 @@ def resolve_pipeline(path: str | Path) -> Pipeline:
         generator=generator,
         validators=validators,
         selector=selector,
-        transformation=transformation,
+        transformations=transformations,
         mapping=mapping,
     )
