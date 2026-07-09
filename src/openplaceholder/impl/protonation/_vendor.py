@@ -1,12 +1,14 @@
 # mypy: ignore-errors
-"""pH-aware ligand protonation, excised from PatWalters/protonate_utils.
+"""pH-aware protein and ligand protonation, excised from PatWalters/protonate_utils.
 
-Ligand-mode functions lifted verbatim from
-https://github.com/PatWalters/protonate_utils (v0.1.3, single-module
-``protonate_utils.py``) so we depend only on ``dimorphite-dl`` rather than
-the full package (whose protein path also needs biotite/hydride).
+Ligand-mode and protein-mode functions lifted verbatim from
+https://github.com/PatWalters/protonate_utils (single-module
+``protonate_utils.py``), minus the command-line interface. The command-line
+entry points (``parse_args``/``main``) are intentionally omitted.
 
-The entry point used by openplaceholder is ``protonate_molecule(mol, ph)``.
+Entry points used by openplaceholder:
+    - ``protonate_molecule(mol, ph)``        -- ligand (RDKit + Dimorphite-DL)
+    - ``protonate_structure(structure, ...)``-- protein (biotite + hydride)
 
 Original code is MIT licensed:
 
@@ -19,6 +21,37 @@ Original code is MIT licensed:
     "as is", without warranty of any kind. See the upstream LICENSE for the
     full text.
 """
+
+import argparse
+import contextlib
+import sys
+
+# ---------------------------------------------------------------------------
+# Ligand mode (RDKit + Dimorphite-DL)
+# ---------------------------------------------------------------------------
+
+
+@contextlib.contextmanager
+def _quiet_rdkit_errors():
+    """
+    Silence RDKit's C++ ``rdApp.error`` logger for the duration of the block.
+
+    RDKit writes valence/sanitization complaints (e.g. "Explicit valence for
+    atom # 7 N, 4, is greater than permitted") straight to stderr from its C++
+    core. These fire routinely on inputs RDKit then recovers from anyway -- a
+    nitro group written uncharged as ``N(=O)=O`` logs the error but still parses
+    to ``[N+](=O)[O-]`` -- so the message is noise. Use this only around parse
+    and sanitize calls where we already surface genuine failures ourselves
+    (a ``None`` return or a caught exception reported as ``[warn] skipping``),
+    so no real error is hidden.
+    """
+    from rdkit import RDLogger
+
+    RDLogger.DisableLog("rdApp.error")
+    try:
+        yield
+    finally:
+        RDLogger.EnableLog("rdApp.error")
 
 
 def _skeleton_copy(mol):
@@ -481,14 +514,19 @@ def protonate_molecule(mol, ph, add_coord_hs=True):
     # molecule. Setting NoImplicit=True with an explicit H count makes
     # the atom state fully determined, which keeps kekulization happy on
     # aromatic heterocycles.
-    new_states = _target_atom_states(mol_heavy, ph)
-    mol_heavy = Chem.RWMol(mol_heavy)
-    for idx, (charge, n_hs) in new_states.items():
-        a = mol_heavy.GetAtomWithIdx(idx)
-        a.SetFormalCharge(charge)
-        a.SetNumExplicitHs(n_hs)
-        a.SetNoImplicit(True)
-    Chem.SanitizeMol(mol_heavy)
+    # RDKit logs valence complaints straight to stderr while parsing
+    # Dimorphite's candidate microstates and while sanitizing the reprotonated
+    # molecule; both are recovered from or reported by us, so quiet the noise
+    # across the whole region.
+    with _quiet_rdkit_errors():
+        new_states = _target_atom_states(mol_heavy, ph)
+        mol_heavy = Chem.RWMol(mol_heavy)
+        for idx, (charge, n_hs) in new_states.items():
+            a = mol_heavy.GetAtomWithIdx(idx)
+            a.SetFormalCharge(charge)
+            a.SetNumExplicitHs(n_hs)
+            a.SetNoImplicit(True)
+        Chem.SanitizeMol(mol_heavy)
 
     # For SDF output, add explicit hydrogens so they are written to the
     # file. With 3D coordinates they are positioned from the existing
@@ -526,3 +564,399 @@ def protonate_smiles_string(smiles, ph=7.4):
         raise ValueError(f"Could not parse SMILES {smiles!r}")
     protonated = protonate_molecule(mol, ph, add_coord_hs=False)
     return Chem.MolToSmiles(protonated)
+
+
+def _is_smiles_path(path):
+    return path.lower().endswith((".smi", ".smiles"))
+
+
+def _looks_like_smiles_header(line):
+    """
+    True if `line` is a column header (e.g. "SMILES Name") rather than a
+    molecule record -- i.e. its first whitespace-delimited token does not
+    parse as a SMILES. RDKit's error logging is silenced during the probe
+    so the expected parse failure doesn't print a spurious error.
+    """
+    from rdkit import Chem
+
+    token = line.split(None, 1)[0]
+    with _quiet_rdkit_errors():
+        return Chem.MolFromSmiles(token) is None
+
+
+def read_molecules(path):
+    """
+    Yield molecules from `path`, which may be SMILES (.smi/.smiles) or
+    SDF. Unparseable entries are yielded as None so callers can count
+    and report them. SMILES files are read as one molecule per line,
+    "SMILES [optional name]"; an optional leading header line (e.g.
+    "SMILES Name"), recognized by its first token not parsing as a
+    SMILES, is skipped.
+    """
+    from rdkit import Chem
+
+    if _is_smiles_path(path):
+        with open(path) as fh:
+            first = True
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                if first:
+                    first = False
+                    # A header line isn't a molecule record; skip it
+                    # silently rather than reporting a parse failure.
+                    if _looks_like_smiles_header(line):
+                        continue
+                parts = line.split(None, 1)
+                with _quiet_rdkit_errors():
+                    mol = Chem.MolFromSmiles(parts[0])
+                if mol is not None and len(parts) > 1:
+                    mol.SetProp("_Name", parts[1].strip())
+                yield mol
+    else:
+        with _quiet_rdkit_errors():
+            supplier = Chem.SDMolSupplier(path, removeHs=False, sanitize=True)
+            for mol in supplier:
+                yield mol
+
+
+def make_writer(path):
+    """Return an SDF or SMILES writer based on the output extension."""
+    from rdkit import Chem
+
+    if _is_smiles_path(path):
+        return Chem.SmilesWriter(path, includeHeader=False)
+    return Chem.SDWriter(path)
+
+
+def protonate_ligands(input_path, output_path, ph):
+    """Batch-protonate a ligand file (SDF/SMILES) into another."""
+    writer = make_writer(output_path)
+    # SMILES output never needs coordinate-bearing explicit hydrogens.
+    add_coord_hs = not _is_smiles_path(output_path)
+
+    n_in = n_out = n_fail = 0
+    for mol in read_molecules(input_path):
+        n_in += 1
+        if mol is None:
+            n_fail += 1
+            print(
+                f"[warn] skipping molecule {n_in}: RDKit failed to parse",
+                file=sys.stderr,
+            )
+            continue
+        try:
+            protonated = protonate_molecule(mol, ph, add_coord_hs=add_coord_hs)
+        except Exception as exc:
+            n_fail += 1
+            label = mol.GetProp("_Name") if mol.HasProp("_Name") else f"#{n_in}"
+            print(f"[warn] skipping {label}: {exc}", file=sys.stderr)
+            continue
+        writer.write(protonated)
+        n_out += 1
+
+    writer.close()
+    print(f"Read {n_in} molecules, wrote {n_out}, skipped {n_fail}.")
+
+
+# ---------------------------------------------------------------------------
+# Protein mode (Biotite + Hydride)
+# ---------------------------------------------------------------------------
+
+# AMBER/CHARMM force-field protonation-state residue names mapped to their
+# canonical CCD amino-acid code. These variants either are absent from the CCD
+# or -- worse -- collide with unrelated CCD components (e.g. "HIE" and "HID"
+# are registered as completely different small molecules, not histidine
+# tautomers), so connect_via_residue_names matches against the wrong template
+# and assigns zero bonds. They all share their parent residue's heavy-atom
+# connectivity, and we strip and re-add hydrogens at the requested pH anyway,
+# so renaming to the standard code before bonding is safe and lets Hydride
+# place hydrogens correctly.
+_PROTONATION_RESNAME_ALIASES = {
+    # Histidine tautomers/protonation states (AMBER HIx, CHARMM HSx).
+    "HID": "HIS",
+    "HIE": "HIS",
+    "HIP": "HIS",
+    "HSD": "HIS",
+    "HSE": "HIS",
+    "HSP": "HIS",
+    # Cysteine: disulfide-bonded / deprotonated thiolate.
+    "CYX": "CYS",
+    "CYM": "CYS",
+    # Neutral (protonated) aspartate / glutamate.
+    "ASH": "ASP",
+    "GLH": "GLU",
+    # Neutral lysine, deprotonated tyrosine, neutral arginine.
+    "LYN": "LYS",
+    "TYM": "TYR",
+    "ARN": "ARG",
+}
+
+
+def _normalize_protonation_resnames(structure):
+    """
+    Rewrite force-field protonation-state residue names (HID, HIE, CYX, ...)
+    in-place to their canonical CCD amino-acid codes so that
+    ``connect_via_residue_names`` can assign covalent bonds. Returns the
+    structure for convenience. See `_PROTONATION_RESNAME_ALIASES`.
+    """
+    import numpy as np
+
+    res_name = np.char.upper(structure.res_name.astype(str))
+    for alias, canonical in _PROTONATION_RESNAME_ALIASES.items():
+        res_name[res_name == alias] = canonical
+    structure.res_name = res_name
+    return structure
+
+
+# Per-atom formal-charge overrides that pin a residue to the protonation state
+# its force-field name encodes, overriding Hydride's pH-based estimate. Applied
+# only when `honor_protonation` is set. The HID/HIE tautomer difference is *not*
+# a charge difference (both are neutral) and is handled separately by swapping
+# imidazole ring bond orders; HIP is the +1 imidazolium and is pinned here.
+_PROTONATION_CHARGE_OVERRIDES = {
+    "HIP": {"ND1": 1},
+    "HSP": {"ND1": 1},  # imidazolium, +1
+    "HID": {"ND1": 0, "NE2": 0},
+    "HSD": {"ND1": 0, "NE2": 0},  # neutral
+    "HIE": {"ND1": 0, "NE2": 0},
+    "HSE": {"ND1": 0, "NE2": 0},  # neutral
+    "ASH": {"OD1": 0, "OD2": 0},  # neutral aspartic acid
+    "GLH": {"OE1": 0, "OE2": 0},  # neutral glutamic acid
+    "LYN": {"NZ": 0},  # neutral lysine
+    "ARN": {"NH1": 0, "NH2": 0},  # neutral arginine
+    "CYM": {"SG": -1},  # cysteine thiolate
+    "TYM": {"OH": -1},  # tyrosinate
+    "CYX": {"SG": 0},  # disulfide cysteine (+SS bond)
+}
+
+# Force-field names for the delta-protonated histidine tautomer (H on ND1).
+# The CCD HIS template is the epsilon tautomer (H on NE2), so these need the
+# imidazole ring double bond moved from ND1=CE1 to CE1=NE2.
+_DELTA_HISTIDINE_RESNAMES = {"HID", "HSD"}
+
+
+def _swap_to_delta_histidine(bonds, name_to_idx):
+    """
+    Move the imidazole ring double bond so the added hydrogen lands on ND1
+    (delta tautomer) instead of NE2. No-op if any ring atom is missing.
+    """
+    import biotite.structure as struc
+
+    nd1 = name_to_idx.get("ND1")
+    ce1 = name_to_idx.get("CE1")
+    ne2 = name_to_idx.get("NE2")
+    if nd1 is None or ce1 is None or ne2 is None:
+        return
+    bonds.remove_bond(nd1, ce1)
+    bonds.add_bond(nd1, ce1, struc.BondType.AROMATIC_SINGLE)
+    bonds.remove_bond(ce1, ne2)
+    bonds.add_bond(ce1, ne2, struc.BondType.AROMATIC_DOUBLE)
+
+
+def _bond_disulfides(structure, sg_indices, cutoff=2.5):
+    """
+    Add an S-S single bond between each disulfide-cysteine SG and its nearest
+    partner SG within `cutoff` angstrom, so Hydride leaves those sulfurs
+    unprotonated. Each sulfur is paired at most once.
+    """
+    import biotite.structure as struc
+    import numpy as np
+
+    coord = structure.coord
+    bonded = set()
+    for a in sg_indices:
+        if a in bonded:
+            continue
+        best, best_d = None, cutoff
+        for b in sg_indices:
+            if b == a or b in bonded:
+                continue
+            d = float(np.linalg.norm(coord[a] - coord[b]))
+            if d < best_d:
+                best, best_d = b, d
+        if best is not None:
+            structure.bonds.add_bond(a, best, struc.BondType.SINGLE)
+            bonded.add(a)
+            bonded.add(best)
+
+
+def _enforce_input_protonation(structure, original_res_names, charges):
+    """
+    Pin each residue to the exact protonation/tautomer state encoded by its
+    original force-field name, instead of letting Hydride re-decide from pH.
+
+    `charges` (Hydride's pH estimate, aligned to `structure`) is overridden in
+    place and returned; HID/HSD residues additionally get their imidazole ring
+    bond orders swapped so the hydrogen lands on ND1, and CYX pairs get an
+    explicit S-S bond. `structure.bonds` is modified in place. `original_res_names`
+    holds the residue names as they were *before* normalization to CCD codes.
+    """
+    import biotite.structure as struc
+
+    starts = struc.get_residue_starts(structure, add_exclusive_stop=True)
+    cyx_sg = []
+    for k in range(len(starts) - 1):
+        start, stop = int(starts[k]), int(starts[k + 1])
+        variant = str(original_res_names[start])
+        overrides = _PROTONATION_CHARGE_OVERRIDES.get(variant)
+        if overrides is None:
+            continue
+        name_to_idx = {str(structure.atom_name[i]): i for i in range(start, stop)}
+        for atom_name, q in overrides.items():
+            i = name_to_idx.get(atom_name)
+            if i is not None:
+                charges[i] = q
+        if variant in _DELTA_HISTIDINE_RESNAMES:
+            _swap_to_delta_histidine(structure.bonds, name_to_idx)
+        if variant == "CYX":
+            sg = name_to_idx.get("SG")
+            if sg is not None:
+                cyx_sg.append(sg)
+    _bond_disulfides(structure, cyx_sg)
+    return charges
+
+
+def reorder_hydrogens_after_heavy_atoms(atoms):
+    """
+    Return a new AtomArray where each hydrogen immediately follows the
+    heavy atom it is bonded to.
+
+    Hydrogens bonded to the same heavy atom appear in the order Hydride
+    originally placed them. Orphan hydrogens (no heavy-atom bond found)
+    are appended at the end as a fallback.
+
+    The input AtomArray must have a populated BondList.
+    """
+    import numpy as np
+
+    if atoms.bonds is None:
+        raise ValueError(
+            "AtomArray must have an associated BondList; " "call connect_via_residue_names() before reordering."
+        )
+
+    # neighbors has shape (n_atoms, max_bonds); -1 entries are padding.
+    neighbors, _ = atoms.bonds.get_all_bonds()
+    is_hydrogen = atoms.element == "H"
+    n_atoms = len(atoms)
+
+    new_order = []
+    placed = np.zeros(n_atoms, dtype=bool)
+
+    for i in range(n_atoms):
+        if placed[i] or is_hydrogen[i]:
+            continue
+        # Place the heavy atom.
+        new_order.append(i)
+        placed[i] = True
+        # Then its bonded hydrogens, in their original relative order.
+        h_indices = sorted(int(j) for j in neighbors[i] if j >= 0 and is_hydrogen[j] and not placed[j])
+        for j in h_indices:
+            new_order.append(j)
+            placed[j] = True
+
+    # Any leftover atoms (e.g. unbonded hydrogens) go at the end.
+    for i in range(n_atoms):
+        if not placed[i]:
+            new_order.append(i)
+            placed[i] = True
+
+    return atoms[new_order]
+
+
+def protonate_structure(structure, ligand_res_name=None, ph=7.0, relax=True, honor_protonation=True):
+    """
+    Return a hydrogenated copy of a protein `AtomArray`.
+
+    In-memory analogue of `protonate_molecule` for proteins: takes an
+    AtomArray (e.g. from ``pdb.PDBFile.read(path).get_structure(model=1)``)
+    and returns a new AtomArray with pH-appropriate hydrogens added and
+    each hydrogen reordered to immediately follow its bonded heavy atom.
+
+    If `ligand_res_name` is given (and not "none"), atoms with that
+    residue name are removed first. Several residues may be removed at
+    once by passing a comma-delimited list (e.g. "EST,CL6"); a ValueError
+    is raised naming any residue name not present in the structure. Any
+    pre-existing hydrogens are stripped before Hydride adds them back.
+
+    When `honor_protonation` is True (the default), residues named with a
+    force-field protonation/tautomer code -- HID/HIE/HIP (and CHARMM
+    HSD/HSE/HSP), ASH, GLH, LYN, ARN, CYM, TYM, CYX -- are pinned to exactly
+    the state that name encodes, overriding Hydride's pH estimate (e.g. HID
+    keeps its proton on ND1, HIP stays the +1 imidazolium, CYX sulfurs are
+    S-S bonded and left unprotonated). With it False, every residue is
+    (re)protonated purely from `ph`, so the input HID/HIE/... distinction is
+    discarded.
+    """
+    import biotite.structure as struc
+    import hydride
+    import numpy as np
+
+    # Optionally remove one or more ligands by residue name (3-letter CCD
+    # code). A comma-delimited list removes several at once, e.g. "EST,CL6"
+    # to clear both ligands (and any buffer/ion residues) from a pocket.
+    # "none" (any case) means "keep everything".
+    if ligand_res_name is not None and ligand_res_name.lower() != "none":
+        targets = [name.strip().upper() for name in ligand_res_name.split(",") if name.strip()]
+        upper_res = np.char.upper(structure.res_name.astype(str))
+        missing = [t for t in targets if not (upper_res == t).any()]
+        if missing:
+            raise ValueError("No atoms with res_name " + ", ".join(repr(m) for m in missing) + " found in structure.")
+        structure = structure[~np.isin(upper_res, targets)]
+
+    # Strip any pre-existing hydrogens; Hydride will add them itself.
+    structure = structure[structure.element != "H"]
+
+    # Capture the force-field protonation names before they are normalized
+    # away, so we can re-impose the exact states they encode further down.
+    original_res_names = np.char.upper(structure.res_name.astype(str))
+
+    # Normalize force-field protonation-state residue names (HID/HIE/CYX/...)
+    # to canonical CCD codes; otherwise connect_via_residue_names matches them
+    # against the wrong template (or none) and leaves those residues unbonded.
+    structure = _normalize_protonation_resnames(structure)
+
+    # Assign covalent bonds from CCD residue templates.
+    structure.bonds = struc.connect_via_residue_names(structure)
+
+    # Set formal charges for canonical amino acids at the requested pH,
+    # then optionally pin the force-field-named residues to their encoded state.
+    charges = hydride.estimate_amino_acid_charges(structure, ph=ph)
+    if honor_protonation:
+        charges = _enforce_input_protonation(structure, original_res_names, charges)
+    structure.set_annotation("charge", charges)
+
+    # Add hydrogens, then optionally relax their geometry.
+    structure, _ = hydride.add_hydrogen(structure)
+    if relax:
+        structure.coord = hydride.relax_hydrogen(structure)
+
+    # Reorder so each hydrogen follows its bonded heavy atom.
+    return reorder_hydrogens_after_heavy_atoms(structure)
+
+
+def prepare_structure(
+    input_path, ligand_res_name, output_path, ph=7.0, relax=True, honor_protonation=True, quiet=False
+):
+    """
+    Read a PDB file, protonate it with `protonate_structure`, and write
+    the result to another PDB file. File-to-file driver analogous to
+    `protonate_ligands` on the ligand side.
+    """
+    import biotite.structure.io.pdb as pdb
+
+    structure = pdb.PDBFile.read(input_path).get_structure(model=1)
+    structure = protonate_structure(
+        structure,
+        ligand_res_name=ligand_res_name,
+        ph=ph,
+        relax=relax,
+        honor_protonation=honor_protonation,
+    )
+
+    out = pdb.PDBFile()
+    out.set_structure(structure)
+    out.write(output_path)
+    if not quiet:
+        print(f"Wrote hydrogenated structure to {output_path}")

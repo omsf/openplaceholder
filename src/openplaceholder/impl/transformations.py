@@ -1,6 +1,4 @@
 import base64
-import subprocess
-import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,7 +15,10 @@ from openplaceholder.core.assembly.transformation import (
     TransformationConfigBase,
 )
 from openplaceholder.core.structure import Structure, StructureFormat
-from openplaceholder.impl._protonate_ligand import protonate_molecule
+from openplaceholder.impl.protonation import (
+    ProtonateUtilsLigandProtonator,
+    ProtonateUtilsProteinProtonator,
+)
 
 # heavy-atom ligand of a complex, robust to truncated residue names
 _LIGAND = "not protein and not element H"
@@ -25,10 +26,8 @@ _LIGAND = "not protein and not element H"
 
 @dataclass(frozen=True)
 class MaxVolumeSiteTransformationConfig(TransformationConfigBase):
-    # protonation pH passed to pdb2pqr/propka
+    # protonation pH for both protein and ligand
     ph: float = 7.0
-    # pdb2pqr protein forcefield; small-molecule OpenFF does not apply here
-    forcefield: str = "AMBER"
 
 
 class MaxVolumeSiteTransformation(Transformation):
@@ -40,18 +39,25 @@ class MaxVolumeSiteTransformation(Transformation):
                        ligand occupies the largest convex-hull volume.
       2. prepare    -- PDBFixer adds missing heavy atoms to that protein (and
                        would build missing residues/loops for crystal inputs).
-      3. protonate  -- pdb2pqr (propka) adds hydrogens to that protein at
-                       ``ph``; every ligand gets explicit hydrogens via RDKit.
+      3. protonate  -- add hydrogens at ``ph`` to that protein and to every
+                       ligand, using the configured protonation methods.
 
     Selecting first means only the chosen protein is prepared/protonated.
     Ligands stay in their own frames (no coordinate transplant); the chosen
     protein context is returned first.
+
+    Protein and ligand protonation are independent: the ligand method never
+    sees the protein and vice versa. Where a ligand-protein hydrogen bond
+    spans the two, neither side accounts for the other, so both partners can
+    end up protonated (a donor-donor clash) -- callers needing bonded-network
+    consistency should reconcile the interface afterwards.
     """
 
     _config: MaxVolumeSiteTransformationConfig
 
     def _setup(self) -> None:
-        pass
+        self._ligand_protonator = ProtonateUtilsLigandProtonator()
+        self._protein_protonator = ProtonateUtilsProteinProtonator()
 
     def _transform(self, structures: list[Structure]) -> list[Structure]:
         structures = self._select(structures)
@@ -91,29 +97,12 @@ class MaxVolumeSiteTransformation(Transformation):
             protein_pdb = Path(tmp) / "protein.pdb"
             self._protein_atoms(structure).write(str(protein_pdb))
 
-            out_pdb = Path(tmp) / "protonated.pdb"
-            # resolve the console script next to the running interpreter so it
-            # works whether invoked via `pixi run` or the interpreter directly
-            pdb2pqr = Path(sys.executable).with_name("pdb2pqr30")
-            subprocess.run(
-                [
-                    str(pdb2pqr) if pdb2pqr.exists() else "pdb2pqr30",
-                    f"--ff={self._config.forcefield}",
-                    f"--with-ph={self._config.ph}",
-                    "--titration-state-method=propka",
-                    "--keep-chain",
-                    "--pdb-output",
-                    str(out_pdb),
-                    str(protein_pdb),
-                    str(Path(tmp) / "protein.pqr"),
-                ],
-                check=True,
-                capture_output=True,
-            )
-            return self._assemble(structure, mda.Universe(str(out_pdb)).atoms, self._ligand_atoms(structure))
+            protonated_pdb = Path(tmp) / "protonated.pdb"
+            protonated_pdb.write_text(self._protein_protonator.protonate(protein_pdb.read_text(), self._config.ph))
+            return self._assemble(structure, mda.Universe(str(protonated_pdb)).atoms, self._ligand_atoms(structure))
 
     def _protonate_ligand(self, structure: Structure) -> Structure:
-        mol = protonate_molecule(structure.to_rdkit_ligand_mol(selection=_LIGAND), self._config.ph)  # type: ignore[no-untyped-call]
+        mol = self._ligand_protonator.protonate(structure.to_rdkit_ligand_mol(selection=_LIGAND), self._config.ph)
         with tempfile.TemporaryDirectory() as tmp:
             ligand_pdb = Path(tmp) / "ligand.pdb"
             ligand_pdb.write_text(Chem.MolToPDBBlock(mol))
