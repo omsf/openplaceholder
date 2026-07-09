@@ -9,7 +9,11 @@ from openplaceholder.impl.generator.openfold3 import (
 )
 from openplaceholder.impl.mappers import LOMAPMapper
 from openplaceholder.impl.selector.mpo import MPOSelector
-from openplaceholder.impl.transformations import MaxVolumeSiteTransformation
+from openplaceholder.impl.transformations import (
+    ComplexProtonationTransformation,
+    MaxVolumeSiteSelectionTransformation,
+    ProteinPreparationTransformation,
+)
 from openplaceholder.impl.validators import PosebustersValidator
 
 CONFIG_TEMPLATE = """
@@ -33,7 +37,14 @@ implementation = "openplaceholder.impl.selector.mpo:MPOSelector"
 VolumeOverlapObjective = {{ weight = 1.0 }}
 
 [[assembly.transformations]]
-implementation = "openplaceholder.impl.transformations:MaxVolumeSiteTransformation"
+implementation = "openplaceholder.impl.transformations:MaxVolumeSiteSelectionTransformation"
+
+[[assembly.transformations]]
+implementation = "openplaceholder.impl.transformations:ProteinPreparationTransformation"
+
+[[assembly.transformations]]
+implementation = "openplaceholder.impl.transformations:ComplexProtonationTransformation"
+ph = 7.0
 
 [assembly.mapping]
 implementation = "openplaceholder.impl.mappers:LOMAPMapper"
@@ -63,5 +74,10 @@ class TestResolvePipeline(TestCase):
             self.assertIn("VolumeOverlapObjective", selector._config.objectives)
 
             self.assertIsInstance(pipeline.transformations, list)
-            self.assertIsInstance(pipeline.transformations[0], MaxVolumeSiteTransformation)
+            self.assertEqual(len(pipeline.transformations), 3)
+            self.assertIsInstance(pipeline.transformations[0], MaxVolumeSiteSelectionTransformation)
+            self.assertIsInstance(pipeline.transformations[1], ProteinPreparationTransformation)
+            protonation = pipeline.transformations[2]
+            assert isinstance(protonation, ComplexProtonationTransformation)
+            self.assertEqual(protonation._config.ph, 7.0)
             self.assertIsInstance(pipeline.mapping, LOMAPMapper)
