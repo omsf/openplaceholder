@@ -4,7 +4,7 @@ import base64
 import hashlib
 import io
 import json
-from dataclasses import asdict, dataclass, fields
+from dataclasses import asdict, dataclass, fields, replace
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, Self
@@ -15,6 +15,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem, rdDetermineBonds
 from rdkit.Geometry import Point3D
 
+from openplaceholder.core.mda_pdb import to_pdb_block
 from openplaceholder.core.serialization import JSONSerializable, to_shallow_dict
 
 
@@ -136,6 +137,25 @@ class Structure(JSONSerializable):
         except (ValueError, Chem.AtomValenceException, Chem.KekulizeException) as exc:
             raise LigandPerceptionError(f"could not perceive ligand '{self.ligand_name}' from its pose: {exc}") from exc
         return mol
+
+    def protein_atoms(self) -> mda.AtomGroup:
+        return self.to_mda_universe().select_atoms("protein")
+
+    def ligand_atoms(self) -> mda.AtomGroup:
+        return self.to_mda_universe().select_atoms("not protein")
+
+    def with_atoms(self, atoms: mda.AtomGroup) -> Self:
+        """Return a copy of this structure whose data is ``atoms`` serialised as PDB.
+
+        Keeps the metadata (sequence, ligand) and normalises the format to PDB --
+        the write-side mirror of :meth:`to_mda_universe`.
+        """
+        block = to_pdb_block(atoms)
+        return replace(
+            self,
+            structure_format=StructureFormat.PDB,
+            structure_data=base64.b64encode(block.encode()).decode(),
+        )
 
     def to_dict(self) -> dict[Any, Any]:
         return to_shallow_dict(self)

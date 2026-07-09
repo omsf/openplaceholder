@@ -4,6 +4,8 @@ import tempfile
 from pathlib import Path
 from unittest import TestCase, skip
 
+import MDAnalysis as mda
+
 from openplaceholder.core.serialization import from_json, to_json
 from openplaceholder.core.structure import (
     Structure,
@@ -15,6 +17,11 @@ from openplaceholder.tests.helpers import make_structures, read_gzip_file
 
 BENZENE_SMILES = "C1=CC=CC=C1"
 PHENOL_SMILES = "C1=CC=C(C=C1)O"
+
+
+def _tyk2_structure() -> Structure:
+    content = base64.b64encode(read_gzip_file(str(TYK2_LIG_PDB))).decode()
+    return Structure("SEQ", BENZENE_SMILES, "lig_ejm_55", "pdb", content)
 
 
 class TestStructureFormat(TestCase):
@@ -94,6 +101,26 @@ class TestStructure(TestCase):
         )
         u = a.to_mda_universe()
         assert len(u.select_atoms("protein")) > len(u.select_atoms("not protein")) > 0
+
+    def test_protein_and_ligand_atoms_partition_the_complex(self) -> None:
+        s = _tyk2_structure()
+
+        protein, ligand = s.protein_atoms(), s.ligand_atoms()
+
+        self.assertGreater(len(protein), len(ligand))
+        self.assertGreater(len(ligand), 0)
+        self.assertEqual(len(protein) + len(ligand), len(s.to_mda_universe().atoms))
+
+    def test_with_atoms_returns_pdb_copy_preserving_metadata(self) -> None:
+        s = _tyk2_structure()
+        merged = mda.Merge(s.protein_atoms(), s.ligand_atoms()).atoms
+
+        rebuilt = s.with_atoms(merged)
+
+        self.assertEqual(rebuilt.structure_format, StructureFormat.PDB)
+        self.assertEqual(rebuilt.sequence, s.sequence)
+        self.assertEqual(rebuilt.ligand_name, s.ligand_name)
+        self.assertEqual(len(rebuilt.to_mda_universe().atoms), len(merged))
 
 
 class TestStructureSet(TestCase):

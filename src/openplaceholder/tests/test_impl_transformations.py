@@ -3,7 +3,7 @@ import importlib.util
 import unittest
 from unittest import TestCase
 
-from openplaceholder.core.structure import Structure, StructureFormat
+from openplaceholder.core.structure import Structure
 from openplaceholder.impl.transformations import (
     ComplexProtonationTransformation,
     ComplexProtonationTransformationConfig,
@@ -11,9 +11,6 @@ from openplaceholder.impl.transformations import (
     MaxVolumeSiteSelectionTransformationConfig,
     ProteinPreparationTransformation,
     ProteinPreparationTransformationConfig,
-    _assemble,
-    _ligand_atoms,
-    _protein_atoms,
 )
 from openplaceholder.tests.datafiles import TYK2_LIG_PDB
 from openplaceholder.tests.helpers import read_gzip_file
@@ -71,22 +68,6 @@ def _tyk2_complex() -> Structure:
         structure_format="pdb",
         structure_data=content,
     )
-
-
-class TestAssemble(TestCase):
-
-    def test_assemble_preserves_metadata_and_all_atoms_as_pdb(self) -> None:
-        complex_ = _tyk2_complex()
-        protein, ligand = _protein_atoms(complex_), _ligand_atoms(complex_)
-
-        assembled = _assemble(complex_, protein, ligand)
-
-        self.assertEqual(assembled.structure_format, StructureFormat.PDB)
-        self.assertEqual(assembled.ligand_name, "ejm55")
-        universe = assembled.to_mda_universe()  # round-trips as valid PDB
-        self.assertEqual(len(universe.atoms), len(protein) + len(ligand))
-        self.assertGreater(len(universe.select_atoms("protein")), 0)
-        self.assertGreater(len(universe.select_atoms("not protein")), 0)
 
 
 @unittest.skipUnless(_HAS_DIMORPHITE, "dimorphite_dl (ligand protonation) not installed")

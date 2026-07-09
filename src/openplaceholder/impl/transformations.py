@@ -20,7 +20,6 @@ records, so a hydrogenated PDB is the natural, deliberate output format even if
 the co-folded input was MMCIF.
 """
 
-import base64
 import io
 from dataclasses import dataclass
 
@@ -35,7 +34,8 @@ from openplaceholder.core.assembly.transformation import (
     Transformation,
     TransformationConfigBase,
 )
-from openplaceholder.core.structure import Structure, StructureFormat
+from openplaceholder.core.mda_pdb import atoms_from_pdb_block, to_pdb_block
+from openplaceholder.core.structure import Structure
 from openplaceholder.impl.protonation import (
     ProlifInterfaceReconciler,
     ProtonateUtilsLigandProtonator,
@@ -46,45 +46,13 @@ from openplaceholder.impl.protonation import (
 _LIGAND = "not protein and not element H"
 
 
-def _protein_atoms(structure: Structure) -> mda.AtomGroup:
-    return structure.to_mda_universe().select_atoms("protein")
-
-
-def _ligand_atoms(structure: Structure) -> mda.AtomGroup:
-    return structure.to_mda_universe().select_atoms("not protein")
-
-
 def _ligand_volume(structure: Structure) -> float:
-    return float(ConvexHull(_ligand_atoms(structure).positions).volume)
+    return float(ConvexHull(structure.ligand_atoms().positions).volume)
 
 
-def _to_pdb_block(atoms: mda.AtomGroup) -> str:
-    """Serialise an AtomGroup to a PDB string in memory (no disk I/O)."""
-    buffer = io.StringIO()
-    with mda.Writer(buffer, format="PDB", n_atoms=len(atoms)) as writer:
-        writer.write(atoms)
-        # the MMCIF parser's default altLoc is a NUL byte that corrupts the
-        # fixed-width PDB columns MDAnalysis writes it into and breaks the PDB
-        # parsers downstream; scrub it on every round-trip
-        return buffer.getvalue().replace("\x00", " ")
-
-
-def _atoms_from_pdb_block(block: str) -> mda.AtomGroup:
-    """Parse a PDB string back into an AtomGroup in memory (no disk I/O)."""
-    return mda.Universe(io.StringIO(block), topology_format="PDB").atoms
-
-
-def _assemble(template: Structure, protein: mda.AtomGroup, ligand: mda.AtomGroup) -> Structure:
-    """Build a PDB ``Structure`` from protein + ligand atoms, keeping metadata."""
-    block = _to_pdb_block(mda.Merge(protein, ligand).atoms)
-    return Structure(
-        sequence=template.sequence,
-        ligand_smiles=template.ligand_smiles,
-        ligand_name=template.ligand_name,
-        # PDB is the deliberate output format for a hydrogenated complex
-        structure_format=StructureFormat.PDB,
-        structure_data=base64.b64encode(block.encode()).decode(),
-    )
+def _rebuild(structure: Structure, protein: mda.AtomGroup, ligand: mda.AtomGroup) -> Structure:
+    """Reassemble a complex from its protein + ligand atoms, keeping metadata."""
+    return structure.with_atoms(mda.Merge(protein, ligand).atoms)
 
 
 @dataclass(frozen=True)
@@ -140,15 +108,14 @@ class ProteinPreparationTransformation(Transformation):
         return [self._prepare_protein(canonical), *structures[1:]]
 
     def _prepare_protein(self, structure: Structure) -> Structure:
-        fixer = PDBFixer(pdbfile=io.StringIO(_to_pdb_block(_protein_atoms(structure))))
+        fixer = PDBFixer(pdbfile=io.StringIO(to_pdb_block(structure.protein_atoms())))
         fixer.findMissingResidues()
         fixer.findMissingAtoms()
         fixer.addMissingAtoms()  # heavy atoms only; hydrogens come from ComplexProtonationTransformation
 
         sink = io.StringIO()
         PDBFile.writeFile(fixer.topology, fixer.positions, sink)
-        fixed = _atoms_from_pdb_block(sink.getvalue())
-        return _assemble(structure, fixed, _ligand_atoms(structure))
+        return _rebuild(structure, atoms_from_pdb_block(sink.getvalue()), structure.ligand_atoms())
 
 
 @dataclass(frozen=True)
@@ -192,12 +159,12 @@ class ComplexProtonationTransformation(Transformation):
 
     def _protonate_ligand(self, structure: Structure) -> Structure:
         mol = self._ligand_protonator.protonate(structure.to_rdkit_ligand_mol(selection=_LIGAND), self._config.ph)
-        ligand = _atoms_from_pdb_block(Chem.MolToPDBBlock(mol))
-        return _assemble(structure, _protein_atoms(structure), ligand)
+        ligand = atoms_from_pdb_block(Chem.MolToPDBBlock(mol))
+        return _rebuild(structure, structure.protein_atoms(), ligand)
 
     def _protonate_protein(self, structure: Structure) -> Structure:
-        protonated_block = self._protein_protonator.protonate(_to_pdb_block(_protein_atoms(structure)), self._config.ph)
-        return _assemble(structure, _atoms_from_pdb_block(protonated_block), _ligand_atoms(structure))
+        protonated_block = self._protein_protonator.protonate(to_pdb_block(structure.protein_atoms()), self._config.ph)
+        return _rebuild(structure, atoms_from_pdb_block(protonated_block), structure.ligand_atoms())
 
     def _reconcile(self, structure: Structure) -> Structure:
         # the ligand heavy-atom coordinates are unchanged by protonation, so
@@ -206,5 +173,5 @@ class ComplexProtonationTransformation(Transformation):
         ligand_mol = self._ligand_protonator.protonate(
             structure.to_rdkit_ligand_mol(selection=_LIGAND), self._config.ph
         )
-        fixed_protein = self._reconciler.reconcile(_protein_atoms(structure), ligand_mol)
-        return _assemble(structure, fixed_protein, _ligand_atoms(structure))
+        fixed_protein = self._reconciler.reconcile(structure.protein_atoms(), ligand_mol)
+        return _rebuild(structure, fixed_protein, structure.ligand_atoms())
