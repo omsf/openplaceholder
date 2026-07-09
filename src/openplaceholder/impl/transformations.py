@@ -16,6 +16,7 @@ from openplaceholder.core.assembly.transformation import (
 )
 from openplaceholder.core.structure import Structure, StructureFormat
 from openplaceholder.impl.protonation import (
+    ProlifInterfaceReconciler,
     ProtonateUtilsLigandProtonator,
     ProtonateUtilsProteinProtonator,
 )
@@ -47,10 +48,13 @@ class MaxVolumeSiteTransformation(Transformation):
     protein context is returned first.
 
     Protein and ligand protonation are independent: the ligand method never
-    sees the protein and vice versa. Where a ligand-protein hydrogen bond
-    spans the two, neither side accounts for the other, so both partners can
-    end up protonated (a donor-donor clash) -- callers needing bonded-network
-    consistency should reconcile the interface afterwards.
+    sees the protein and vice versa. Where a ligand-protein hydrogen bond spans
+    the two, neither side accounts for the other, so both partners can end up
+    protonated (a donor-donor clash) or both left bare (an acceptor-acceptor
+    miss). A final reconcile step removes the protein-side hydrogen of any
+    donor-donor clash and warns about acceptor-acceptor misses (which need a
+    proton invented, so they are left for review). Backbone-amide clashes and
+    all acceptor-acceptor misses are pocket-pKa problems no local rule fixes.
     """
 
     _config: MaxVolumeSiteTransformationConfig
@@ -58,6 +62,7 @@ class MaxVolumeSiteTransformation(Transformation):
     def _setup(self) -> None:
         self._ligand_protonator = ProtonateUtilsLigandProtonator()
         self._protein_protonator = ProtonateUtilsProteinProtonator()
+        self._reconciler = ProlifInterfaceReconciler()
 
     def _transform(self, structures: list[Structure]) -> list[Structure]:
         structures = self._select(structures)
@@ -88,9 +93,21 @@ class MaxVolumeSiteTransformation(Transformation):
 
     def _protonate(self, structures: list[Structure]) -> list[Structure]:
         # add ligand hydrogens first, while proteins still carry standard
-        # residue names, then protonate the single canonical protein
+        # residue names, then protonate the single canonical protein and
+        # reconcile the two independent protonations at their interface
         structures = [self._protonate_ligand(s) for s in structures]
-        return [self._protonate_protein(structures[0]), *structures[1:]]
+        protonated = self._protonate_protein(structures[0])
+        return [self._reconcile(protonated), *structures[1:]]
+
+    def _reconcile(self, structure: Structure) -> Structure:
+        # the ligand heavy-atom coordinates are unchanged by protonation, so
+        # re-protonating them deterministically reproduces the ligand mol (with
+        # explicit hydrogens + conformer) the reconciler needs
+        ligand_mol = self._ligand_protonator.protonate(
+            structure.to_rdkit_ligand_mol(selection=_LIGAND), self._config.ph
+        )
+        fixed_protein = self._reconciler.reconcile(self._protein_atoms(structure), ligand_mol)
+        return self._assemble(structure, fixed_protein, self._ligand_atoms(structure))
 
     def _protonate_protein(self, structure: Structure) -> Structure:
         with tempfile.TemporaryDirectory() as tmp:
