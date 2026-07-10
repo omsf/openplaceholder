@@ -4,11 +4,16 @@ import os
 import random
 from pathlib import Path
 import tomllib
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger("run_openfold.py")
 
 from openplaceholder.impl.generator.openfold3 import (
     OpenFold3Generator,
     OpenFold3GeneratorConfig,
 )
+from openplaceholder.impl.generator.archiver import JSONArchiver, JSONArchiverConfig
 
 TOML_CONFIG = Path(__file__).parents[1] / "config.toml"
 
@@ -25,6 +30,7 @@ if __name__ == "__main__":
     generator_config["run_openfold_path"] = os.getenv("RUN_OPENFOLD_PATH")
 
     if gendir := os.getenv("GEN_DIR_OVERRIDE"):
+        logging.info("Overriding generator directory with %s", gendir)
         generator_config["generator_directory"] = gendir
 
     if not generator_config["implementation"] == "openplaceholder.impl.generator.openfold3:OpenFold3Generator":
@@ -37,10 +43,14 @@ if __name__ == "__main__":
     num_seeds = generator_config["generate_n_seeds"]
     n_diffusion_samples = generator_config["n_diffusion_samples"]
     gen_dir = Path(generator_config["generator_directory"])
-    clean_up = generator_config.get("generate_n_seeds") or False
+    clean_up = generator_config.get("clean_up") or False
     sequence = generator_config["sequence"]
     ligands = generator_config["ligands"]
     run_openfold_path = os.getenv("RUN_OPENFOLD_PATH")
+
+    # set up an archiver to grab the packaged structures
+    archiver_config = JSONArchiverConfig(path="./archive.json")
+    archiver = JSONArchiver(archiver_config)
 
     config = OpenFold3GeneratorConfig(
         sequence=sequence,
@@ -56,4 +66,7 @@ if __name__ == "__main__":
         raise ValueError("Missing RUN_OPENFOLD_PATH")
 
     generator = OpenFold3Generator(config)
-    generator.run()
+    structures = generator.run()
+
+    # write structures to disk
+    archiver.write(structures)
