@@ -19,3 +19,17 @@ class LOMAPMapper(Mapper):
 
     def _map(self, structures: list[Structure]) -> AlchemicalNetwork:
         raise NotImplementedError
+
+@dataclass(frozen=True)
+class KartografMapperConfig(MapperConfigBase):
+    central_ligand: str | None = None
+
+class KartografMapper(Mapper):
+
+    _config: KartografMapperConfig
+
+    def _setup(self) -> None:
+        pass
+
+    def _map(self, structures: list[Structure]) -> AlchemicalNetwork:
+        raise NotImplementedError
