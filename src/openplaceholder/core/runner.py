@@ -1,8 +1,11 @@
+import logging
+
 from gufe import AlchemicalNetwork
 
 from openplaceholder.core.pipeline import Pipeline
 from openplaceholder.core.structure import Structure, StructureSet
 
+logger = logging.getLogger(__name__)
 
 def run_serial(pipeline: Pipeline) -> AlchemicalNetwork:
     """Naive and simple implementation for running a pipeline.
@@ -16,12 +19,21 @@ def run_serial(pipeline: Pipeline) -> AlchemicalNetwork:
     transformations = pipeline.transformations
 
     structure_sets: list[StructureSet] = []
-    for artifact in generator.run():
+
+    logger.info("Generating structures")
+    artifacts = generator.run()
+
+    for artifact in artifacts:
         structures: list[Structure] = artifact.structures
+
+        logger.info(f"Performing validation for {artifact.ligand_name}")
 
         for validator in pipeline.validators:
             structures = validator.validate_structures(structures)
 
+        if not structures:
+            logger.warning(f"No structures for ligand {artifact.ligand_name} passed validation, dropping")
+            continue
         structure_sets.append(StructureSet.from_structures(structures))
 
     # selector.select optimizes jointly across all ligands' candidate sets
