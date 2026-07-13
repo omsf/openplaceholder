@@ -44,7 +44,7 @@ class VolumeOverlapObjective(Objective):
 
     @staticmethod
     def _ligand_coords(structure: Structure) -> np.ndarray:
-        ligand = structure.to_mda_universe().select_atoms(f"resname {structure.ligand_name}")
+        ligand = structure.to_mda_universe().select_atoms(f"resname {structure.ligand_name} or resname LIG")
 
         # Built directly from atoms + positions rather than via
         # AtomGroup.convert_to("RDKIT"): that path guesses bonds, which is
