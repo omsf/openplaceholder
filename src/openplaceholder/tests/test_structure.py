@@ -5,6 +5,8 @@ from pathlib import Path
 from unittest import TestCase, skip
 
 import MDAnalysis as mda
+from rdkit import Chem
+from rdkit.Chem.rdDistGeom import EmbedMolecule
 
 from openplaceholder.core.serialization import from_json, to_json
 from openplaceholder.core.structure import (
@@ -22,6 +24,21 @@ PHENOL_SMILES = "C1=CC=C(C=C1)O"
 def _tyk2_structure() -> Structure:
     content = base64.b64encode(read_gzip_file(str(TYK2_LIG_PDB))).decode()
     return Structure("SEQ", BENZENE_SMILES, "lig_ejm_55", "pdb", content)
+
+
+def _hydrogenated_unl_structure(smiles: str, ligand_name: str) -> Structure:
+    """A single-ligand PDB whose residue is named ``UNL`` (as the pipeline writes
+    protonated ligands) and carries explicit hydrogens -- deliberately *not*
+    named after ``ligand_name`` -- to exercise the default ligand selection."""
+    mol = Chem.AddHs(Chem.MolFromSmiles(smiles))
+    EmbedMolecule(mol, randomSeed=0xF00D)
+    for atom in mol.GetAtoms():
+        info = Chem.AtomPDBResidueInfo()
+        info.SetResidueName("UNL")
+        info.SetIsHeteroAtom(True)
+        atom.SetMonomerInfo(info)
+    block = base64.b64encode(Chem.MolToPDBBlock(mol).encode()).decode()
+    return Structure("SEQ", smiles, ligand_name, "pdb", block)
 
 
 class TestStructureFormat(TestCase):
@@ -121,6 +138,17 @@ class TestStructure(TestCase):
         self.assertEqual(rebuilt.sequence, s.sequence)
         self.assertEqual(rebuilt.ligand_name, s.ligand_name)
         self.assertEqual(len(rebuilt.to_mda_universe().atoms), len(merged))
+
+    def test_to_rdkit_ligand_mol_default_ignores_residue_name_and_hydrogens(self) -> None:
+        # pipeline output names the ligand residue "UNL" (not ligand_name) and
+        # carries explicit hydrogens; the default selection must perceive it
+        # regardless -- a resname/hydrogen-sensitive default fails here.
+        smiles = "CC(=O)Nc1ccccc1"
+        s = _hydrogenated_unl_structure(smiles, ligand_name="acetanilide_007")
+
+        mol = s.to_rdkit_ligand_mol()
+
+        self.assertEqual(Chem.MolToSmiles(Chem.RemoveHs(mol)), Chem.MolToSmiles(Chem.MolFromSmiles(smiles)))
 
 
 class TestStructureSet(TestCase):
