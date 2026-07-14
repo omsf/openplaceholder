@@ -95,22 +95,30 @@ class TestMaxVolumeSiteSubstitutionTransformation(TestCase):
         self.assertTrue(np.allclose(proteins[0], proteins[1], atol=1e-3))
 
 
+class TestProteinPreparationTransformation(TestCase):
+
+    def test_fills_missing_heavy_atoms_without_adding_hydrogens(self) -> None:
+        complex_ = _tyk2_complex()
+        raw_heavy = len(complex_.protein_atoms().select_atoms("not element H"))
+
+        prepared = ProteinPreparationTransformation(ProteinPreparationTransformationConfig()).transform([complex_])[0]
+        protein = prepared.protein_atoms()
+
+        # PDBFixer fills missing heavy atoms; adding hydrogens is ComplexProtonation's job, not this one's
+        self.assertGreater(len(protein.select_atoms("not element H")), raw_heavy)
+        self.assertEqual(len(protein.select_atoms("element H")), 0)
+
+
 @unittest.skipUnless(_HAS_DIMORPHITE, "dimorphite_dl (ligand protonation) not installed")
-class TestStackedTransformations(TestCase):
-    """Substitute -> Prepare -> Protonate, stacked as the runner would apply them."""
+class TestComplexProtonationTransformation(TestCase):
 
-    def test_full_stack_protonates_protein_and_ligand(self) -> None:
-        structures = [_tyk2_complex()]
+    def test_adds_hydrogens_to_both_protein_and_ligand(self) -> None:
+        complex_ = _tyk2_complex()
 
-        structures = MaxVolumeSiteSubstitutionTransformation(MaxVolumeSiteSubstitutionTransformationConfig()).transform(
-            structures
-        )
-        structures = ProteinPreparationTransformation(ProteinPreparationTransformationConfig()).transform(structures)
-        structures = ComplexProtonationTransformation(ComplexProtonationTransformationConfig(ph=7.0)).transform(
-            structures
-        )
+        protonated = ComplexProtonationTransformation(ComplexProtonationTransformationConfig(ph=7.0)).transform(
+            [complex_]
+        )[0]
 
-        self.assertEqual(len(structures), 1)
-        universe = structures[0].to_mda_universe()
+        universe = protonated.to_mda_universe()
         self.assertGreater(len(universe.select_atoms("protein and element H")), 0)
         self.assertGreater(len(universe.select_atoms("not protein and element H")), 0)
