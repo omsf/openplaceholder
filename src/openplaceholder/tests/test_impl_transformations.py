@@ -3,14 +3,17 @@ import importlib.util
 import unittest
 from unittest import TestCase
 
+import numpy as np
+
 from openplaceholder.core.structure import Structure
 from openplaceholder.impl.transformations import (
     ComplexProtonationTransformation,
     ComplexProtonationTransformationConfig,
-    MaxVolumeSiteSelectionTransformation,
-    MaxVolumeSiteSelectionTransformationConfig,
+    MaxVolumeSiteSubstitutionTransformation,
+    MaxVolumeSiteSubstitutionTransformationConfig,
     ProteinPreparationTransformation,
     ProteinPreparationTransformationConfig,
+    _ligand_volume,
 )
 from openplaceholder.tests.datafiles import TYK2_LIG_PDB
 from openplaceholder.tests.helpers import read_gzip_file
@@ -41,43 +44,65 @@ def _ligand_structure(scale: float, name: str) -> Structure:
     )
 
 
-class TestMaxVolumeSiteSelectionTransformation(TestCase):
-
-    def test_returns_largest_ligand_volume_first_and_keeps_all(self) -> None:
-        transformation = MaxVolumeSiteSelectionTransformation(MaxVolumeSiteSelectionTransformationConfig())
-        small = _ligand_structure(2.0, "small")
-        large = _ligand_structure(5.0, "large")
-
-        selected = transformation.transform([small, large])
-
-        self.assertEqual(selected[0].ligand_name, "large")
-        self.assertEqual({s.ligand_name for s in selected}, {"small", "large"})
-
-    def test_empty_input_returns_empty(self) -> None:
-        transformation = MaxVolumeSiteSelectionTransformation(MaxVolumeSiteSelectionTransformationConfig())
-
-        self.assertEqual(transformation.transform([]), [])
-
-
-def _tyk2_complex() -> Structure:
+def _tyk2_complex(name: str = "ejm55") -> Structure:
     content = base64.b64encode(read_gzip_file(str(TYK2_LIG_PDB))).decode()
     return Structure(
         sequence="X",
         ligand_smiles=_EJM55_SMILES,
-        ligand_name="ejm55",
+        ligand_name=name,
         structure_format="pdb",
         structure_data=content,
     )
 
 
+class TestLigandVolume(TestCase):
+
+    def test_volume_grows_with_ligand_size(self) -> None:
+        self.assertGreater(
+            _ligand_volume(_ligand_structure(5.0, "large")), _ligand_volume(_ligand_structure(2.0, "small"))
+        )
+
+
+class TestMaxVolumeSiteSubstitutionTransformation(TestCase):
+
+    def test_empty_input_returns_empty(self) -> None:
+        transformation = MaxVolumeSiteSubstitutionTransformation(MaxVolumeSiteSubstitutionTransformationConfig())
+
+        self.assertEqual(transformation.transform([]), [])
+
+    def test_all_complexes_end_up_with_one_shared_protein(self) -> None:
+        # two copies of the same complex, one with its coordinates shifted away:
+        # after substitution both must carry the *canonical* protein (identical
+        # coordinates), while keeping their own ligand identity.
+        canonical = _tyk2_complex("canonical")
+        shifted_universe = _tyk2_complex().to_mda_universe()
+        shifted_universe.atoms.translate([50.0, 0.0, 0.0])
+        shifted = Structure(
+            sequence="X",
+            ligand_smiles=_EJM55_SMILES,
+            ligand_name="shifted",
+            structure_format="pdb",
+            structure_data=canonical.with_atoms(shifted_universe.atoms).structure_data,
+        )
+
+        result = MaxVolumeSiteSubstitutionTransformation(MaxVolumeSiteSubstitutionTransformationConfig()).transform(
+            [canonical, shifted]
+        )
+
+        self.assertEqual({s.ligand_name for s in result}, {"canonical", "shifted"})
+        proteins = [s.protein_atoms().positions for s in result]
+        self.assertEqual(proteins[0].shape, proteins[1].shape)
+        self.assertTrue(np.allclose(proteins[0], proteins[1], atol=1e-3))
+
+
 @unittest.skipUnless(_HAS_DIMORPHITE, "dimorphite_dl (ligand protonation) not installed")
 class TestStackedTransformations(TestCase):
-    """Select -> Prepare -> Protonate, stacked as the runner would apply them."""
+    """Substitute -> Prepare -> Protonate, stacked as the runner would apply them."""
 
     def test_full_stack_protonates_protein_and_ligand(self) -> None:
         structures = [_tyk2_complex()]
 
-        structures = MaxVolumeSiteSelectionTransformation(MaxVolumeSiteSelectionTransformationConfig()).transform(
+        structures = MaxVolumeSiteSubstitutionTransformation(MaxVolumeSiteSubstitutionTransformationConfig()).transform(
             structures
         )
         structures = ProteinPreparationTransformation(ProteinPreparationTransformationConfig()).transform(structures)

@@ -46,7 +46,7 @@ IFPSimilarityObjective = { weight = 1.0 }
 
 
 [[assembly.transformations]]
-implementation = "openplaceholder.impl.transformations:MaxVolumeSiteSelectionTransformation"
+implementation = "openplaceholder.impl.transformations:MaxVolumeSiteSubstitutionTransformation"
 
 [[assembly.transformations]]
 implementation = "openplaceholder.impl.transformations:ProteinPreparationTransformation"

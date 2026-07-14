@@ -1,23 +1,19 @@
 """Structure transformations that assemble co-folded complexes for FEP.
 
-These transformations are meant to be *stacked* (see ``core.pipeline.Pipeline``
-and ``core.runner``): each takes the previous stage's ``list[Structure]`` and
-returns a new one. Splitting the work into separate transformations lets a user
-opt into only the stages they want -- e.g. prepare without protonating, or
-protonate a set that was selected elsewhere.
+Stacked (see ``core.pipeline.Pipeline`` / ``core.runner``): each takes the
+previous stage's ``list[Structure]`` and returns a new one, so a user can opt
+into only the stages they want.
 
-Ordering contract: **index 0 is the canonical protein context.** The selection
-transformation establishes it (the largest-ligand-volume complex); the
-preparation and protonation transformations act on that one protein and leave
-the rest as ligand carriers. Each transformation reads ``structures[0]`` on a
-single explicit line; every helper below operates on one ``Structure`` at a
-time and never on list position. If selection is omitted from a pipeline, the
-contract still holds -- ``structures[0]`` is simply whatever the upstream stage
-emitted.
+The substitution transformation gives every complex the *same* protein context
+(the canonical one), which makes the preparation and protonation transformations
+that follow order-independent -- they operate on every structure identically,
+with no positional/"index 0" special-casing. Because all proteins are then
+equal, preparing/protonating each one repeats the same work N times; that
+duplication is deliberate for now and a later PR can cache it away.
 
 Transformation output is always PDB: protonation adds hydrogens and CONECT
-records, so a hydrogenated PDB is the natural, deliberate output format even if
-the co-folded input was MMCIF.
+records, so a hydrogenated PDB is the natural output format even if the co-folded
+input was MMCIF.
 """
 
 import io
@@ -25,6 +21,7 @@ from dataclasses import dataclass
 
 import MDAnalysis as mda
 import numpy as np
+from MDAnalysis.analysis import align
 from openmm.app import PDBFile
 from pdbfixer import PDBFixer
 from rdkit import Chem
@@ -55,20 +52,23 @@ def _rebuild(structure: Structure, protein: mda.AtomGroup, ligand: mda.AtomGroup
 
 
 @dataclass(frozen=True)
-class MaxVolumeSiteSelectionTransformationConfig(TransformationConfigBase):
+class MaxVolumeSiteSubstitutionTransformationConfig(TransformationConfigBase):
     pass
 
 
-class MaxVolumeSiteSelectionTransformation(Transformation):
-    """Reorder complexes so the canonical protein context is first.
+class MaxVolumeSiteSubstitutionTransformation(Transformation):
+    """Give every complex the same (canonical) protein context.
 
-    Picks the complex whose ligand occupies the largest convex-hull volume and
-    returns the list with that complex at index 0 (establishing the ordering
-    contract the preparation/protonation stages rely on). Pure reordering: no
-    structure is prepared, protonated, or otherwise altered here.
+    Picks the complex whose ligand occupies the largest convex-hull volume as
+    the canonical protein, superposes every complex onto it (protein CA fit,
+    which rigidly carries each ligand into the canonical frame), and rebuilds
+    each structure as the canonical protein + its own now co-framed ligand.
+    After this step all structures share one protein, so the downstream
+    preparation and protonation stages don't need to track which structure is
+    canonical -- they act on every structure identically.
     """
 
-    _config: MaxVolumeSiteSelectionTransformationConfig
+    _config: MaxVolumeSiteSubstitutionTransformationConfig
 
     def _setup(self) -> None:
         pass
@@ -77,8 +77,18 @@ class MaxVolumeSiteSelectionTransformation(Transformation):
         if not structures:
             return structures
         volumes = [_ligand_volume(s) for s in structures]
-        chosen = int(np.argmax(volumes))
-        return [structures[chosen], *(s for i, s in enumerate(structures) if i != chosen)]
+        reference = structures[int(np.argmax(volumes))].to_mda_universe()
+        canonical_protein = reference.select_atoms("protein")
+        return [self._substitute(s, reference, canonical_protein) for s in structures]
+
+    @staticmethod
+    def _substitute(structure: Structure, reference: mda.Universe, canonical_protein: mda.AtomGroup) -> Structure:
+        # rigid-fit this complex's protein onto the canonical protein (CA fit),
+        # which carries its ligand into the canonical frame, then pair the
+        # canonical protein with that now co-framed ligand
+        mobile = structure.to_mda_universe()
+        align.alignto(mobile, reference, select="protein and name CA")
+        return _rebuild(structure, canonical_protein, mobile.select_atoms("not protein"))
 
 
 @dataclass(frozen=True)
@@ -87,12 +97,12 @@ class ProteinPreparationTransformationConfig(TransformationConfigBase):
 
 
 class ProteinPreparationTransformation(Transformation):
-    """Add missing heavy atoms to the canonical protein.
+    """Add missing heavy atoms to each complex's protein.
 
     PDBFixer fills in missing heavy atoms (and would build missing
-    residues/loops for crystal inputs) on the protein of ``structures[0]``, the
-    canonical protein context. Hydrogens are not added here -- that is
-    ``ComplexProtonationTransformation``'s job. Other structures are untouched.
+    residues/loops for crystal inputs), applied to every structure
+    independently. Hydrogens are not added here -- that is
+    ``ComplexProtonationTransformation``'s job.
     """
 
     _config: ProteinPreparationTransformationConfig
@@ -101,10 +111,7 @@ class ProteinPreparationTransformation(Transformation):
         pass
 
     def _transform(self, structures: list[Structure]) -> list[Structure]:
-        if not structures:
-            return structures
-        canonical = structures[0]  # ordering contract: index 0 is the canonical protein context
-        return [self._prepare_protein(canonical), *structures[1:]]
+        return [self._prepare_protein(s) for s in structures]
 
     def _prepare_protein(self, structure: Structure) -> Structure:
         fixer = PDBFixer(pdbfile=io.StringIO(to_pdb_block(structure.protein_atoms())))
@@ -124,16 +131,13 @@ class ComplexProtonationTransformationConfig(TransformationConfigBase):
 
 
 class ComplexProtonationTransformation(Transformation):
-    """Protonate every ligand and the canonical protein.
+    """Protonate every complex's ligand and protein at ``ph``.
 
-    Every ligand is protonated at ``ph`` (position-independent); the canonical
-    protein (``structures[0]``) is protonated at ``ph``.
-
-    Protein and ligand protonation are independent: the ligand method never sees
-    the protein and vice versa. Where a ligand-protein hydrogen bond spans the
-    two, neither side accounts for the other, so the interface protonation is not
-    guaranteed self-consistent (e.g. both partners of an H-bond may end up
-    protonated). This is left for a downstream/dedicated step to address.
+    Applied to every structure independently. Protein and ligand protonation are
+    independent (the ligand method never sees the protein and vice versa), so the
+    ligand-protein interface protonation is not guaranteed self-consistent (e.g.
+    both partners of an H-bond may end up protonated); reconciling that interface
+    is left for a downstream/dedicated step.
     """
 
     _config: ComplexProtonationTransformationConfig
@@ -143,13 +147,7 @@ class ComplexProtonationTransformation(Transformation):
         self._protein_protonator = ProtonateUtilsProteinProtonator()
 
     def _transform(self, structures: list[Structure]) -> list[Structure]:
-        if not structures:
-            return structures
-        # protonate every ligand first, while proteins still carry standard
-        # residue names, then protonate the canonical protein
-        protonated = [self._protonate_ligand(s) for s in structures]
-        canonical = protonated[0]  # ordering contract: index 0 is the canonical protein context
-        return [self._protonate_protein(canonical), *protonated[1:]]
+        return [self._protonate_protein(self._protonate_ligand(s)) for s in structures]
 
     def _protonate_ligand(self, structure: Structure) -> Structure:
         mol = self._ligand_protonator.protonate(structure.to_rdkit_ligand_mol(selection=_LIGAND), self._config.ph)
