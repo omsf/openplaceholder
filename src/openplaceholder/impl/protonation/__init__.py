@@ -1,14 +1,5 @@
-"""Modular protonation methods for the assembly stage."""
+"""Vendored protonation routines used by ``ComplexProtonationTransformation``.
 
-from openplaceholder.impl.protonation.base import LigandProtonator, ProteinProtonator
-from openplaceholder.impl.protonation.protonate_utils import (
-    ProtonateUtilsLigandProtonator,
-    ProtonateUtilsProteinProtonator,
-)
-
-__all__ = [
-    "LigandProtonator",
-    "ProteinProtonator",
-    "ProtonateUtilsLigandProtonator",
-    "ProtonateUtilsProteinProtonator",
-]
+The protonation logic itself lives on ``ComplexProtonationTransformation``; this
+subpackage only holds the vendored ``_vendor`` source it calls into.
+"""

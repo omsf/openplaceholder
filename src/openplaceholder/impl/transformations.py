@@ -17,7 +17,9 @@ input was MMCIF.
 """
 
 import io
+import tempfile
 from dataclasses import dataclass
+from pathlib import Path
 
 import MDAnalysis as mda
 import numpy as np
@@ -33,13 +35,19 @@ from openplaceholder.core.assembly.transformation import (
 )
 from openplaceholder.core.mda_pdb import atoms_from_pdb_block, to_pdb_block
 from openplaceholder.core.structure import Structure
-from openplaceholder.impl.protonation import (
-    ProtonateUtilsLigandProtonator,
-    ProtonateUtilsProteinProtonator,
+from openplaceholder.impl.protonation._vendor import (
+    protonate_molecule,
+    protonate_structure,
 )
 
 # heavy-atom ligand of a complex, robust to truncated residue names
 _LIGAND = "not protein and not element H"
+
+# hydride's compiled relaxation step (geometry-optimising the placed hydrogens)
+# is incompatible with the numpy 2.x stack here (an int32/long buffer mismatch);
+# hydrogen *placement* -- the pH-correct states -- is unaffected, so relaxation
+# is left off.
+_RELAX_PROTEIN_HYDROGENS = False
 
 
 def _ligand_volume(structure: Structure) -> float:
@@ -133,7 +141,9 @@ class ComplexProtonationTransformationConfig(TransformationConfigBase):
 class ComplexProtonationTransformation(Transformation):
     """Protonate every complex's ligand and protein at ``ph``.
 
-    Applied to every structure independently. Protein and ligand protonation are
+    Applied to every structure independently. Ligand protonation uses
+    Dimorphite-DL microstates and protein protonation uses hydride (both vendored
+    from PatWalters/protonate_utils). Protein and ligand protonation are
     independent (the ligand method never sees the protein and vice versa), so the
     ligand-protein interface protonation is not guaranteed self-consistent (e.g.
     both partners of an H-bond may end up protonated); reconciling that interface
@@ -143,17 +153,35 @@ class ComplexProtonationTransformation(Transformation):
     _config: ComplexProtonationTransformationConfig
 
     def _setup(self) -> None:
-        self._ligand_protonator = ProtonateUtilsLigandProtonator()
-        self._protein_protonator = ProtonateUtilsProteinProtonator()
+        pass
 
     def _transform(self, structures: list[Structure]) -> list[Structure]:
         return [self._protonate_protein(self._protonate_ligand(s)) for s in structures]
 
     def _protonate_ligand(self, structure: Structure) -> Structure:
-        mol = self._ligand_protonator.protonate(structure.to_rdkit_ligand_mol(selection=_LIGAND), self._config.ph)
+        mol: Chem.Mol = protonate_molecule(  # type: ignore[no-untyped-call]
+            structure.to_rdkit_ligand_mol(selection=_LIGAND), self._config.ph
+        )
         ligand = atoms_from_pdb_block(Chem.MolToPDBBlock(mol))
         return _rebuild(structure, structure.protein_atoms(), ligand)
 
     def _protonate_protein(self, structure: Structure) -> Structure:
-        protonated_block = self._protein_protonator.protonate(to_pdb_block(structure.protein_atoms()), self._config.ph)
+        # biotite is imported lazily so importing this module never requires it
+        import biotite.structure.io.pdb as pdb_io
+
+        with tempfile.TemporaryDirectory() as tmp:
+            in_pdb = Path(tmp) / "protein.pdb"
+            in_pdb.write_text(to_pdb_block(structure.protein_atoms()))
+            biotite_structure = pdb_io.PDBFile.read(str(in_pdb)).get_structure(model=1)
+
+            biotite_structure = protonate_structure(  # type: ignore[no-untyped-call]
+                biotite_structure, ph=self._config.ph, relax=_RELAX_PROTEIN_HYDROGENS
+            )
+
+            out_file = pdb_io.PDBFile()
+            out_file.set_structure(biotite_structure)
+            out_pdb = Path(tmp) / "protein_h.pdb"
+            out_file.write(str(out_pdb))
+            protonated_block = out_pdb.read_text()
+
         return _rebuild(structure, atoms_from_pdb_block(protonated_block), structure.ligand_atoms())
