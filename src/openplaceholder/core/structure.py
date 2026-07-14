@@ -8,6 +8,7 @@ from dataclasses import asdict, dataclass, fields, replace
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, Self
+import logging
 
 import MDAnalysis as mda
 import numpy as np
@@ -19,6 +20,7 @@ from rdkit.Geometry import Point3D
 from openplaceholder.core.serialization import JSONSerializable, to_shallow_dict
 from openplaceholder.core.utils import _quiet_rdkit_warnings
 
+logger = logging.getLogger(__name__)
 
 def atoms_to_pdb_string(atoms: mda.AtomGroup) -> str:
     """Serialise an AtomGroup to a PDB string.
@@ -173,6 +175,8 @@ class Structure(JSONSerializable):
         heavy = ligand.select_atoms("not element H")
         hydrogens = ligand.select_atoms("element H")
 
+        logger.debug("Found %d atoms for ligand %s", len(ligand), self.ligand_name)
+
         editable = Chem.RWMol()
         conformer = Chem.Conformer(len(heavy))
         for i, atom in enumerate(heavy):
@@ -282,3 +286,9 @@ class StructureSet(JSONSerializable):
 
     def __len__(self) -> int:
         return len(self.structures)
+
+    def __iter__(self):
+        yield from self.structures
+
+    def __getitem__(self, key):
+        return self.structures[key]
