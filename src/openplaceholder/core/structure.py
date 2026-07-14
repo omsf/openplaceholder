@@ -102,11 +102,15 @@ class Structure(JSONSerializable):
         distance-based ``DetermineConnectivity``, which only needs elements
         and 3D coordinates.
 
-        ``selection`` overrides the default ``resname``-based atom selection
-        (e.g. ``"not protein and not element H"`` to pick the heavy-atom
-        ligand of a complex whose residue name was truncated on write).
+        By default the ligand is the non-protein heavy atoms -- the whole ligand
+        in a single-ligand complex, and robust to how the residue was named or
+        truncated on write (a PDB ``resName`` is only three characters, so a
+        longer ``ligand_name`` cannot survive there; the identity lives in the
+        ``ligand_name`` field, not the residue name). Pass ``selection`` to
+        override, e.g. ``f"resname {self.ligand_name}"`` to isolate one residue
+        from other heteroatoms.
         """
-        ligand = self.to_mda_universe().select_atoms(selection or f"resname {self.ligand_name}")
+        ligand = self.to_mda_universe().select_atoms(selection or "not protein and not element H")
 
         editable = Chem.RWMol()
         conformer = Chem.Conformer(len(ligand))

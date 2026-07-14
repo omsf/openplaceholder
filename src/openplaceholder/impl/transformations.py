@@ -38,8 +38,10 @@ from openplaceholder.vendor.protonate_utils import (
     protonate_structure,
 )
 
-# heavy-atom ligand of a complex, robust to truncated residue names
-_LIGAND = "not protein and not element H"
+# stable PDB residue name for the protonated ligand -- RDKit's MolToPDBBlock
+# stamps "UNL" otherwise, and a PDB resName is only three characters (so a
+# longer ligand_name cannot be preserved here)
+_LIGAND_RESNAME = "LIG"
 
 # hydride's compiled relaxation step (geometry-optimising the placed hydrogens)
 # is incompatible with the numpy 2.x stack here (an int32/long buffer mismatch);
@@ -55,6 +57,15 @@ def _ligand_volume(structure: Structure) -> float:
 def _rebuild(structure: Structure, protein: mda.AtomGroup, ligand: mda.AtomGroup) -> Structure:
     """Reassemble a complex from its protein + ligand atoms, keeping metadata."""
     return structure.with_atoms(mda.Merge(protein, ligand).atoms)
+
+
+def _name_ligand_residue(mol: Chem.Mol, resname: str) -> None:
+    """Give every ligand atom a PDB residue name so MolToPDBBlock doesn't stamp "UNL"."""
+    for atom in mol.GetAtoms():
+        info = Chem.AtomPDBResidueInfo()
+        info.SetResidueName(resname)
+        info.SetIsHeteroAtom(True)
+        atom.SetMonomerInfo(info)
 
 
 @dataclass(frozen=True)
@@ -157,9 +168,8 @@ class ComplexProtonationTransformation(Transformation):
         return [self._protonate_protein(self._protonate_ligand(s)) for s in structures]
 
     def _protonate_ligand(self, structure: Structure) -> Structure:
-        mol: Chem.Mol = protonate_molecule(  # type: ignore[no-untyped-call]
-            structure.to_rdkit_ligand_mol(selection=_LIGAND), self._config.ph
-        )
+        mol: Chem.Mol = protonate_molecule(structure.to_rdkit_ligand_mol(), self._config.ph)  # type: ignore[no-untyped-call]
+        _name_ligand_residue(mol, _LIGAND_RESNAME)
         ligand = atoms_from_pdb_block(Chem.MolToPDBBlock(mol))
         return _rebuild(structure, structure.protein_atoms(), ligand)
 
