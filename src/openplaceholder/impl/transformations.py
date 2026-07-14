@@ -33,7 +33,7 @@ from openplaceholder.core.assembly.transformation import (
 )
 from openplaceholder.core.mda_pdb import atoms_from_pdb_block, to_pdb_block
 from openplaceholder.core.structure import Structure
-from openplaceholder.impl.protonation._vendor import (
+from openplaceholder.vendor.protonate_utils import (
     protonate_molecule,
     protonate_structure,
 )
