@@ -17,9 +17,7 @@ input was MMCIF.
 """
 
 import io
-import tempfile
 from dataclasses import dataclass
-from pathlib import Path
 
 import MDAnalysis as mda
 import numpy as np
@@ -169,19 +167,13 @@ class ComplexProtonationTransformation(Transformation):
         # biotite is imported lazily so importing this module never requires it
         import biotite.structure.io.pdb as pdb_io
 
-        with tempfile.TemporaryDirectory() as tmp:
-            in_pdb = Path(tmp) / "protein.pdb"
-            in_pdb.write_text(to_pdb_block(structure.protein_atoms()))
-            biotite_structure = pdb_io.PDBFile.read(str(in_pdb)).get_structure(model=1)
+        source = pdb_io.PDBFile.read(io.StringIO(to_pdb_block(structure.protein_atoms())))
+        protonated = protonate_structure(  # type: ignore[no-untyped-call]
+            source.get_structure(model=1), ph=self._config.ph, relax=_RELAX_PROTEIN_HYDROGENS
+        )
 
-            biotite_structure = protonate_structure(  # type: ignore[no-untyped-call]
-                biotite_structure, ph=self._config.ph, relax=_RELAX_PROTEIN_HYDROGENS
-            )
-
-            out_file = pdb_io.PDBFile()
-            out_file.set_structure(biotite_structure)
-            out_pdb = Path(tmp) / "protein_h.pdb"
-            out_file.write(str(out_pdb))
-            protonated_block = out_pdb.read_text()
-
-        return _rebuild(structure, atoms_from_pdb_block(protonated_block), structure.ligand_atoms())
+        out_file = pdb_io.PDBFile()
+        out_file.set_structure(protonated)
+        sink = io.StringIO()
+        out_file.write(sink)
+        return _rebuild(structure, atoms_from_pdb_block(sink.getvalue()), structure.ligand_atoms())
