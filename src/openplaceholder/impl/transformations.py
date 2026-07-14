@@ -37,7 +37,6 @@ from openplaceholder.core.assembly.transformation import (
 from openplaceholder.core.mda_pdb import atoms_from_pdb_block, to_pdb_block
 from openplaceholder.core.structure import Structure
 from openplaceholder.impl.protonation import (
-    ProlifInterfaceReconciler,
     ProtonateUtilsLigandProtonator,
     ProtonateUtilsProteinProtonator,
 )
@@ -125,20 +124,16 @@ class ComplexProtonationTransformationConfig(TransformationConfigBase):
 
 
 class ComplexProtonationTransformation(Transformation):
-    """Protonate every ligand and the canonical protein, then reconcile them.
+    """Protonate every ligand and the canonical protein.
 
     Every ligand is protonated at ``ph`` (position-independent); the canonical
-    protein (``structures[0]``) is protonated at ``ph`` and its interface with
-    its ligand is reconciled.
+    protein (``structures[0]``) is protonated at ``ph``.
 
     Protein and ligand protonation are independent: the ligand method never sees
     the protein and vice versa. Where a ligand-protein hydrogen bond spans the
-    two, neither side accounts for the other, so both partners can end up
-    protonated (a donor-donor clash) or both left bare (an acceptor-acceptor
-    miss). The reconcile step removes the protein-side hydrogen of any
-    donor-donor clash and warns about acceptor-acceptor misses (which need a
-    proton invented, so they are left for review). Backbone-amide clashes and
-    all acceptor-acceptor misses are pocket-pKa problems no local rule fixes.
+    two, neither side accounts for the other, so the interface protonation is not
+    guaranteed self-consistent (e.g. both partners of an H-bond may end up
+    protonated). This is left for a downstream/dedicated step to address.
     """
 
     _config: ComplexProtonationTransformationConfig
@@ -146,16 +141,15 @@ class ComplexProtonationTransformation(Transformation):
     def _setup(self) -> None:
         self._ligand_protonator = ProtonateUtilsLigandProtonator()
         self._protein_protonator = ProtonateUtilsProteinProtonator()
-        self._reconciler = ProlifInterfaceReconciler()
 
     def _transform(self, structures: list[Structure]) -> list[Structure]:
         if not structures:
             return structures
         # protonate every ligand first, while proteins still carry standard
-        # residue names, then protonate + reconcile the canonical protein
+        # residue names, then protonate the canonical protein
         protonated = [self._protonate_ligand(s) for s in structures]
         canonical = protonated[0]  # ordering contract: index 0 is the canonical protein context
-        return [self._reconcile(self._protonate_protein(canonical)), *protonated[1:]]
+        return [self._protonate_protein(canonical), *protonated[1:]]
 
     def _protonate_ligand(self, structure: Structure) -> Structure:
         mol = self._ligand_protonator.protonate(structure.to_rdkit_ligand_mol(selection=_LIGAND), self._config.ph)
@@ -165,13 +159,3 @@ class ComplexProtonationTransformation(Transformation):
     def _protonate_protein(self, structure: Structure) -> Structure:
         protonated_block = self._protein_protonator.protonate(to_pdb_block(structure.protein_atoms()), self._config.ph)
         return _rebuild(structure, atoms_from_pdb_block(protonated_block), structure.ligand_atoms())
-
-    def _reconcile(self, structure: Structure) -> Structure:
-        # the ligand heavy-atom coordinates are unchanged by protonation, so
-        # re-protonating them deterministically reproduces the ligand mol (with
-        # explicit hydrogens + conformer) the reconciler needs
-        ligand_mol = self._ligand_protonator.protonate(
-            structure.to_rdkit_ligand_mol(selection=_LIGAND), self._config.ph
-        )
-        fixed_protein = self._reconciler.reconcile(structure.protein_atoms(), ligand_mol)
-        return _rebuild(structure, fixed_protein, structure.ligand_atoms())

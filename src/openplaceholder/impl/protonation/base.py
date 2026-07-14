@@ -2,8 +2,8 @@
 
 Protein and ligand protonation are deliberately separate abstractions: a
 protonation method may cover one, the other, or both, and they are applied
-independently (see the note in ``ComplexProtonationTransformation`` about the
-resulting protein/ligand H-bond mismatch risk). Add a new method by
+independently, so the ligand-protein interface protonation is not guaranteed
+self-consistent (see ``ComplexProtonationTransformation``). Add a new method by
 implementing one or both of these ABCs.
 """
 
