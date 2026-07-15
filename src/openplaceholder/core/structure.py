@@ -158,15 +158,17 @@ class Structure(JSONSerializable):
         distance-based ``DetermineConnectivity``, which only needs elements
         and 3D coordinates.
 
-        By default the ligand is the non-protein heavy atoms -- the whole ligand
-        in a single-ligand complex, and robust to how the residue was named or
-        truncated on write (a PDB ``resName`` is only three characters, so a
-        longer ``ligand_name`` cannot survive there; the identity lives in the
-        ``ligand_name`` field, not the residue name). Pass ``selection`` to
-        override, e.g. ``f"resname {self.ligand_name}"`` to isolate one residue
-        from other heteroatoms.
+        By default the ligand is everything that isn't protein -- the whole
+        ligand in a single-ligand complex, and robust to how the residue was
+        named or truncated on write (a PDB ``resName`` is only three characters,
+        so a longer ``ligand_name`` cannot survive there; the identity lives in
+        the ``ligand_name`` field, not the residue name). Any hydrogens it has
+        are kept: an unprotonated pose simply has none, while a protonated one
+        is returned as stored rather than silently stripped. Pass ``selection``
+        to override, e.g. ``f"resname {self.ligand_name}"`` to isolate one
+        residue from other heteroatoms.
         """
-        ligand = self.to_mda_universe().select_atoms(selection or "not protein and not element H")
+        ligand = self.to_mda_universe().select_atoms(selection or "not protein")
         if not len(ligand):
             raise LigandPerceptionError(f"no atoms selected for ligand '{self.ligand_name}'")
 
