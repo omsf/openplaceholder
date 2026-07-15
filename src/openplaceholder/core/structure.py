@@ -1,9 +1,11 @@
 """Structure definitions."""
 
 import base64
+import contextlib
 import hashlib
 import io
 import json
+from collections.abc import Iterator
 from dataclasses import asdict, dataclass, fields, replace
 from enum import StrEnum
 from pathlib import Path
@@ -17,6 +19,27 @@ from rdkit.Geometry import Point3D
 
 from openplaceholder.core.mda_pdb import to_pdb_block
 from openplaceholder.core.serialization import JSONSerializable, to_shallow_dict
+
+
+@contextlib.contextmanager
+def _quiet_rdkit_warnings() -> Iterator[None]:
+    """Silence RDKit's C++ ``rdApp.warning`` logger for the duration of the block.
+
+    ``AssignBondOrdersFromTemplate`` logs "More than one matching pattern found
+    - picking one" whenever the template maps onto the perceived skeleton in more
+    than one way. Every ligand we handle contains a symmetric group (e.g. the
+    2,6-dichlorophenyl of the TYK2 series), so that is essentially always true
+    and the message fires once per call -- pure noise. Genuine failures are not
+    hidden: they raise, and we re-report them as ``LigandPerceptionError`` with
+    RDKit's own message attached.
+    """
+    from rdkit import RDLogger
+
+    RDLogger.DisableLog("rdApp.warning")  # type: ignore[attr-defined]
+    try:
+        yield
+    finally:
+        RDLogger.EnableLog("rdApp.warning")  # type: ignore[attr-defined]
 
 
 class UnsupportedFormatError(Exception):
@@ -111,6 +134,8 @@ class Structure(JSONSerializable):
         from other heteroatoms.
         """
         ligand = self.to_mda_universe().select_atoms(selection or "not protein and not element H")
+        if not len(ligand):
+            raise LigandPerceptionError(f"no atoms selected for ligand '{self.ligand_name}'")
 
         editable = Chem.RWMol()
         conformer = Chem.Conformer(len(ligand))
@@ -124,7 +149,10 @@ class Structure(JSONSerializable):
             rdDetermineBonds.DetermineConnectivity(mol)
 
             template = Chem.MolFromSmiles(self.ligand_smiles)
-            mol = AllChem.AssignBondOrdersFromTemplate(template, mol)  # type: ignore[no-untyped-call]
+            if template is None:
+                raise LigandPerceptionError(f"could not parse ligand_smiles {self.ligand_smiles!r}")
+            with _quiet_rdkit_warnings():
+                mol = AllChem.AssignBondOrdersFromTemplate(template, mol)  # type: ignore[no-untyped-call]
 
             # bonds were just (re)assigned from the template, so implicit-H/radical
             # bookkeeping left over from the bond-free starting point is stale;
@@ -137,6 +165,11 @@ class Structure(JSONSerializable):
                 mol_atom.SetNumRadicalElectrons(0)
             mol = editable.GetMol()
             Chem.SanitizeMol(mol)
+            # the template can map onto the perceived skeleton more than one way
+            # (symmetry, or wrong connectivity); RDKit silently picks one, so
+            # verify we got the molecule we asked for rather than trust the pick
+            if Chem.MolToSmiles(mol, isomericSmiles=False) != Chem.MolToSmiles(template, isomericSmiles=False):
+                raise LigandPerceptionError(f"perceived ligand '{self.ligand_name}' does not match its template")
             Chem.AssignStereochemistryFrom3D(mol)
         except (ValueError, Chem.AtomValenceException, Chem.KekulizeException) as exc:
             raise LigandPerceptionError(f"could not perceive ligand '{self.ligand_name}' from its pose: {exc}") from exc
