@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Self
 
 import MDAnalysis as mda
+import numpy as np
 from MDAnalysis import Universe
 from rdkit import Chem
 from rdkit.Chem import AllChem, rdDetermineBonds
@@ -40,6 +41,38 @@ def _quiet_rdkit_warnings() -> Iterator[None]:
         yield
     finally:
         RDLogger.EnableLog("rdApp.warning")  # type: ignore[attr-defined]
+
+
+def _attach_hydrogens(mol: Chem.Mol, heavy: "mda.AtomGroup", hydrogens: "mda.AtomGroup") -> Chem.Mol:
+    """Add `hydrogens` to a perceived heavy-atom `mol`, keeping their real coordinates.
+
+    Each hydrogen is bonded to its nearest heavy atom, which is unambiguous (the
+    next-nearest is far outside bonding range). Doing it this way keeps hydrogens
+    out of ``DetermineConnectivity`` and the template match, where they perturb
+    the mapping and produce spurious valence errors.
+    """
+    editable = Chem.RWMol(mol)
+    positions = [list(mol.GetConformer().GetAtomPosition(i)) for i in range(mol.GetNumAtoms())]
+    for hydrogen in hydrogens:
+        parent = int(np.argmin(np.linalg.norm(heavy.positions - hydrogen.position, axis=1)))
+        editable.AddBond(parent, editable.AddAtom(Chem.Atom(1)), Chem.BondType.SINGLE)
+        positions.append(list(hydrogen.position.astype(float)))
+
+    # the hydrogens are explicit now, so they -- not the perceived valence --
+    # decide each heavy atom's hydrogen count
+    for mol_atom in editable.GetAtoms():
+        if mol_atom.GetAtomicNum() > 1:
+            mol_atom.SetNoImplicit(True)
+            mol_atom.SetNumExplicitHs(0)
+
+    mol = editable.GetMol()
+    conformer = Chem.Conformer(mol.GetNumAtoms())
+    for i, position in enumerate(positions):
+        conformer.SetAtomPosition(i, Point3D(*position))
+    mol.RemoveAllConformers()
+    mol.AddConformer(conformer)
+    Chem.SanitizeMol(mol)
+    return mol
 
 
 class UnsupportedFormatError(Exception):
@@ -137,9 +170,14 @@ class Structure(JSONSerializable):
         if not len(ligand):
             raise LigandPerceptionError(f"no atoms selected for ligand '{self.ligand_name}'")
 
+        # perceive from the heavy atoms alone; any explicit hydrogens the caller
+        # selected are re-attached afterwards (see _attach_hydrogens)
+        heavy = ligand.select_atoms("not element H")
+        hydrogens = ligand.select_atoms("element H")
+
         editable = Chem.RWMol()
-        conformer = Chem.Conformer(len(ligand))
-        for i, atom in enumerate(ligand):
+        conformer = Chem.Conformer(len(heavy))
+        for i, atom in enumerate(heavy):
             editable.AddAtom(Chem.Atom(atom.element))
             conformer.SetAtomPosition(i, Point3D(*atom.position.astype(float)))
         editable.AddConformer(conformer)
@@ -170,6 +208,12 @@ class Structure(JSONSerializable):
             # verify we got the molecule we asked for rather than trust the pick
             if Chem.MolToSmiles(mol, isomericSmiles=False) != Chem.MolToSmiles(template, isomericSmiles=False):
                 raise LigandPerceptionError(f"perceived ligand '{self.ligand_name}' does not match its template")
+            # only if the caller selected them: the heavy-atom default has none
+            # and keeps its implicit hydrogens, while a selection that spans a
+            # protonated ligand gets those hydrogens back rather than silently
+            # dropping the protonation it asked for
+            if len(hydrogens):
+                mol = _attach_hydrogens(mol, heavy, hydrogens)
             Chem.AssignStereochemistryFrom3D(mol)
         except (ValueError, Chem.AtomValenceException, Chem.KekulizeException) as exc:
             raise LigandPerceptionError(f"could not perceive ligand '{self.ligand_name}' from its pose: {exc}") from exc
