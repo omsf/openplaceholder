@@ -1,7 +1,13 @@
 from dataclasses import dataclass
 import logging
+from io import StringIO
 
 from gufe import AlchemicalNetwork, LigandNetwork, Protocol
+import openfe
+from openfe.setup.alchemical_network_planner import RBFEAlchemicalNetworkPlanner
+
+from openff.units import unit
+import MDAnalysis as mda
 
 from openplaceholder.core.assembly.mapper import Mapper, MapperConfigBase
 from openplaceholder.core.structure import Structure, LigandPerceptionError
@@ -35,7 +41,29 @@ class KartografMapper(Mapper):
 
     def _map(self, structures: list[Structure]) -> AlchemicalNetwork:
         ligand_network = self._create_ligand_network(structures)
-        raise NotImplementedError
+
+        solvent = openfe.SolventComponent(
+            ion_concentration=0.15 * unit.molar
+        )
+        protein = self._extract_protein(structures[0])
+        planner = RBFEAlchemicalNetworkPlanner()
+
+        alchemical_network = planner(
+            ligands=ligand_network.nodes,
+            solvent=solvent,
+            protein=protein,
+        )
+        return alchemical_network
+
+    @staticmethod
+    def _extract_protein(structure: Structure) -> openfe.ProteinComponent:
+        atoms = structure.protein_atoms()
+        buffer = StringIO()
+        with mda.Writer(buffer, format="PDB", n_atoms=len(atoms)) as writer:
+            writer.write(atoms)
+            buffer.seek(0)
+            contents = openfe.ProteinComponent.from_pdb_file(buffer)
+        return contents
 
     @staticmethod
     def _create_protocol() -> Protocol:
@@ -47,13 +75,11 @@ class KartografMapper(Mapper):
         ligands = []
         logger.debug("building ligand network from %d structures", len(structures))
         for structure in structures:
-            try:
-                logger.debug("recovering ligand %s from structure", structure.ligand_name)
-                mol = structure.to_rdkit_ligand_mol(selection="resname UNL")
-            except LigandPerceptionError as e:
-                raise e
+            logger.debug("recovering ligand %s from structure", structure.ligand_name)
+            mol = structure.to_rdkit_ligand_mol()
+            smc = openfe.SmallMoleculeComponent(mol, name=structure.ligand_name)
+            ligands.append(smc)
             logger.debug("added %s to ligand network ligands", structure.ligand_name)
-            ligands.append(mol)
 
         mappers = [openfe.setup.KartografAtomMapper()]
         scorer = openfe.lomap_scorers.default_lomap_score
