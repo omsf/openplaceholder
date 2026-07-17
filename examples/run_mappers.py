@@ -19,7 +19,8 @@ if __name__ == "__main__":
     mapper = _build_plugin(config["assembly"]["mapping"])
     logger.info("Created plugin instance, %s", mapper)
 
-    post_transformation_structures = StructureSet.from_file("intermediate.json")
+    post_transformation_structures = StructureSet.from_file("post_transformation_structures.json")
+
     logger.info("Read post-transformation structures from disk: %d structures found", len(post_transformation_structures))
 
     network = mapper.map(post_transformation_structures)
