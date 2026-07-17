@@ -2,6 +2,7 @@
 
 import logging
 from pathlib import Path
+import logging
 
 from openplaceholder.core.resolver import resolve_pipeline
 from openplaceholder.core.runner import run_serial
@@ -9,6 +10,8 @@ from openplaceholder.core.runner import run_serial
 logging.basicConfig(level=logging.INFO)
 
 TOML_CONFIG = Path(__file__).parents[1] / "config.toml"
+
+logging.basicConfig(level=logging.INFO)
 
 if __name__ == "__main__":
     pipeline = resolve_pipeline(TOML_CONFIG)
