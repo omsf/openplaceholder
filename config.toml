@@ -56,4 +56,4 @@ implementation = "openplaceholder.impl.transformations:ComplexProtonationTransfo
 ph = 7.0
 
 [assembly.mapping]
-implementation = "openplaceholder.impl.mappers:LOMAPMapper"
+implementation = "openplaceholder.impl.mappers:KartografMapper"
