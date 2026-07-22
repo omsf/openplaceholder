@@ -18,8 +18,23 @@ from rdkit import Chem
 from rdkit.Chem import AllChem, rdDetermineBonds
 from rdkit.Geometry import Point3D
 
-from openplaceholder.core.mda_pdb import to_pdb_block
 from openplaceholder.core.serialization import JSONSerializable, to_shallow_dict
+
+
+def atoms_to_pdb_string(atoms: mda.AtomGroup) -> str:
+    """Serialise an AtomGroup to a PDB string."""
+    buffer = io.StringIO()
+    with mda.Writer(buffer, format="PDB", n_atoms=len(atoms)) as writer:
+        writer.write(atoms)
+        # the MMCIF parser's default altLoc is a NUL byte that corrupts the
+        # fixed-width PDB columns MDAnalysis writes it into and breaks the PDB
+        # parsers downstream; scrub it on every round-trip
+        return buffer.getvalue().replace("\x00", " ")
+
+
+def atoms_from_pdb_string(block: str) -> mda.AtomGroup:
+    """Parse a PDB string into an MDAnalysis AtomGroup."""
+    return mda.Universe(io.StringIO(block), topology_format="PDB").atoms
 
 
 @contextlib.contextmanager
@@ -233,7 +248,7 @@ class Structure(JSONSerializable):
         Keeps the metadata (sequence, ligand) and normalises the format to PDB --
         the write-side mirror of :meth:`to_mda_universe`.
         """
-        block = to_pdb_block(atoms)
+        block = atoms_to_pdb_string(atoms)
         return replace(
             self,
             structure_format=StructureFormat.PDB,

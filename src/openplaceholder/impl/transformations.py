@@ -31,8 +31,11 @@ from openplaceholder.core.assembly.transformation import (
     Transformation,
     TransformationConfigBase,
 )
-from openplaceholder.core.mda_pdb import atoms_from_pdb_block, to_pdb_block
-from openplaceholder.core.structure import Structure
+from openplaceholder.core.structure import (
+    Structure,
+    atoms_from_pdb_string,
+    atoms_to_pdb_string,
+)
 from openplaceholder.vendor.protonate_utils import (
     protonate_molecule,
     protonate_structure,
@@ -131,14 +134,14 @@ class ProteinPreparationTransformation(Transformation):
         return [self._prepare_protein(s) for s in structures]
 
     def _prepare_protein(self, structure: Structure) -> Structure:
-        fixer = PDBFixer(pdbfile=io.StringIO(to_pdb_block(structure.protein_atoms())))
+        fixer = PDBFixer(pdbfile=io.StringIO(atoms_to_pdb_string(structure.protein_atoms())))
         fixer.findMissingResidues()
         fixer.findMissingAtoms()
         fixer.addMissingAtoms()  # heavy atoms only; hydrogens come from ComplexProtonationTransformation
 
         sink = io.StringIO()
         PDBFile.writeFile(fixer.topology, fixer.positions, sink)
-        return _rebuild(structure, atoms_from_pdb_block(sink.getvalue()), structure.ligand_atoms())
+        return _rebuild(structure, atoms_from_pdb_string(sink.getvalue()), structure.ligand_atoms())
 
 
 @dataclass(frozen=True)
@@ -170,14 +173,14 @@ class ComplexProtonationTransformation(Transformation):
     def _protonate_ligand(self, structure: Structure) -> Structure:
         mol: Chem.Mol = protonate_molecule(structure.to_rdkit_ligand_mol(), self._config.ph)  # type: ignore[no-untyped-call]
         _name_ligand_residue(mol, _LIGAND_RESNAME)
-        ligand = atoms_from_pdb_block(Chem.MolToPDBBlock(mol))
+        ligand = atoms_from_pdb_string(Chem.MolToPDBBlock(mol))
         return _rebuild(structure, structure.protein_atoms(), ligand)
 
     def _protonate_protein(self, structure: Structure) -> Structure:
         # biotite is imported lazily so importing this module never requires it
         import biotite.structure.io.pdb as pdb_io
 
-        source = pdb_io.PDBFile.read(io.StringIO(to_pdb_block(structure.protein_atoms())))
+        source = pdb_io.PDBFile.read(io.StringIO(atoms_to_pdb_string(structure.protein_atoms())))
         protonated = protonate_structure(  # type: ignore[no-untyped-call]
             source.get_structure(model=1), ph=self._config.ph, relax=_RELAX_PROTEIN_HYDROGENS
         )
@@ -186,4 +189,4 @@ class ComplexProtonationTransformation(Transformation):
         out_file.set_structure(protonated)
         sink = io.StringIO()
         out_file.write(sink)
-        return _rebuild(structure, atoms_from_pdb_block(sink.getvalue()), structure.ligand_atoms())
+        return _rebuild(structure, atoms_from_pdb_string(sink.getvalue()), structure.ligand_atoms())

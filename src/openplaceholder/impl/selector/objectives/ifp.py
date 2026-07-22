@@ -7,9 +7,8 @@ from prolif.fingerprint import Fingerprint
 from prolif.molecule import Molecule
 from rdkit import Chem
 
-from openplaceholder.core.mda_pdb import to_pdb_block
 from openplaceholder.core.selection.objective import Objective, ObjectiveConfig
-from openplaceholder.core.structure import Structure
+from openplaceholder.core.structure import Structure, atoms_to_pdb_string
 
 
 @dataclass(frozen=True, eq=True)
@@ -79,7 +78,7 @@ class IFPSimilarityObjective(Objective):
         fails outright on this data -- see Structure.to_rdkit_ligand_mol),
         since it recognizes standard residue/atom naming directly.
         """
-        pdb_block = to_pdb_block(structure.protein_atoms())
+        pdb_block = atoms_to_pdb_string(structure.protein_atoms())
         mol = Chem.MolFromPDBBlock(pdb_block, sanitize=False, removeHs=False, proximityBonding=True)
         # predicted (not crystallographic) coordinates can have minor local
         # geometry issues that trip strict valence checks; aromaticity and
