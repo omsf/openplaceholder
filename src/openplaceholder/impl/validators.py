@@ -15,9 +15,13 @@ logger = logging.getLogger(__name__)
 def _perceive_ligand(structure: Structure) -> Chem.Mol | None:
     """Reconstruct the ligand mol, or None (with a warning) when a distorted
     pose can't be perceived -- so validators drop it instead of crashing down the road."""
+
+    # TODO: cache these
     try:
         return structure.to_rdkit_ligand_mol()
     except LigandPerceptionError as exc:
+        # TODO: should this return None or just raise an
+        # exception. Let downstream handle it.
         logger.warning("dropping structure unperceivable by RDKit: %s", exc)
         return None
 

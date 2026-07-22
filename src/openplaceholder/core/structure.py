@@ -134,6 +134,7 @@ class Structure(JSONSerializable):
         return base64.b64decode(self.structure_data.encode("utf-8"))
 
     def to_mda_universe(self) -> Universe:
+        # TODO: cache the results
         match self.structure_format:
             case StructureFormat.PDB:
                 stream = io.StringIO(self.decode_structure_data().decode())
@@ -148,27 +149,20 @@ class Structure(JSONSerializable):
         return mda.Universe(stream, topology_format=topology_format)
 
     def to_rdkit_ligand_mol(self, selection: str | None = None) -> Chem.Mol:
-        """Build an RDKit Mol for the ligand, with bond orders and
-        stereochemistry assigned from ``ligand_smiles`` and 3D coordinates
-        taken from the structure.
+        """Build an RDKit Mol for the ligand.
 
-        Atoms and positions are read directly from MDAnalysis rather than
-        via ``AtomGroup.convert_to("RDKIT")``: that path guesses bonds from
-        atom *names*, which fails for predicted ligands (generic atom names
-        like "C11"/"CL1" aren't recognized as element symbols) and requires
-        explicit hydrogens. Connectivity instead comes from RDKit's own
-        distance-based ``DetermineConnectivity``, which only needs elements
-        and 3D coordinates.
-
-        By default the ligand is everything that isn't protein -- the whole
-        ligand in a single-ligand complex, and robust to how the residue was
-        named or truncated on write (a PDB ``resName`` is only three characters,
-        so a longer ``ligand_name`` cannot survive there; the identity lives in
-        the ``ligand_name`` field, not the residue name). Any hydrogens it has
-        are kept: an unprotonated pose simply has none, while a protonated one
-        is returned as stored rather than silently stripped. Pass ``selection``
-        to override, e.g. ``f"resname {self.ligand_name}"`` to isolate one
-        residue from other heteroatoms.
+        Bond orders and stereochemistry assigned from
+        ``ligand_smiles`` and 3D coordinates taken from the structure.
+        Atoms and positions are read directly from MDAnalysis rather
+        than via ``AtomGroup.convert_to("RDKIT")``: that path guesses
+        bonds from atom *names*, which fails for predicted ligands
+        (generic atom names like "C11"/"CL1" aren't recognized as
+        element symbols) and requires explicit hydrogens. Connectivity
+        instead comes from RDKit's own distance-based
+        ``DetermineConnectivity``, which only needs elements and 3D
+        coordinates. By default (optionally overrided by
+        ``selection``) the ligand is everything that isn't
+        protein. Any hydrogens it has are kept.
         """
 
         ligand = self.to_mda_universe().select_atoms(selection or "not protein")
