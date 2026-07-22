@@ -33,7 +33,6 @@ from openplaceholder.core.assembly.transformation import (
 )
 from openplaceholder.core.structure import (
     Structure,
-    atoms_from_pdb_string,
     atoms_to_pdb_string,
 )
 from openplaceholder.vendor.protonate_utils import (
@@ -41,6 +40,7 @@ from openplaceholder.vendor.protonate_utils import (
     protonate_structure,
 )
 
+# TODO: this should be moved to a higher level
 # stable PDB residue name for the protonated ligand -- RDKit's MolToPDBBlock
 # stamps "UNL" otherwise, and a PDB resName is only three characters (so a
 # longer ligand_name cannot be preserved here)
@@ -60,15 +60,6 @@ def _ligand_volume(structure: Structure) -> float:
 def _rebuild(structure: Structure, protein: mda.AtomGroup, ligand: mda.AtomGroup) -> Structure:
     """Reassemble a complex from its protein + ligand atoms, keeping metadata."""
     return structure.with_atoms(mda.Merge(protein, ligand).atoms)
-
-
-def _name_ligand_residue(mol: Chem.Mol, resname: str) -> None:
-    """Give every ligand atom a PDB residue name so MolToPDBBlock doesn't stamp "UNL"."""
-    for atom in mol.GetAtoms():
-        info = Chem.AtomPDBResidueInfo()
-        info.SetResidueName(resname)
-        info.SetIsHeteroAtom(True)
-        atom.SetMonomerInfo(info)
 
 
 @dataclass(frozen=True)
@@ -139,9 +130,11 @@ class ProteinPreparationTransformation(Transformation):
         fixer.findMissingAtoms()
         fixer.addMissingAtoms()  # heavy atoms only; hydrogens come from ComplexProtonationTransformation
 
-        sink = io.StringIO()
-        PDBFile.writeFile(fixer.topology, fixer.positions, sink)
-        return _rebuild(structure, atoms_from_pdb_string(sink.getvalue()), structure.ligand_atoms())
+        with io.StringIO() as buffer:
+            PDBFile.writeFile(fixer.topology, fixer.positions, buffer)
+            u_protonated = mda.Universe(buffer, topology_format="PDB")
+
+        return _rebuild(structure, u_protonated.atoms, structure.ligand_atoms())
 
 
 @dataclass(frozen=True)
@@ -172,12 +165,19 @@ class ComplexProtonationTransformation(Transformation):
 
     def _protonate_ligand(self, structure: Structure) -> Structure:
         mol: Chem.Mol = protonate_molecule(structure.to_rdkit_ligand_mol(), self._config.ph)  # type: ignore[no-untyped-call]
-        _name_ligand_residue(mol, _LIGAND_RESNAME)
-        ligand = atoms_from_pdb_string(Chem.MolToPDBBlock(mol))
+
+        for atom in mol.GetAtoms():
+            info = Chem.AtomPDBResidueInfo()
+            info.SetResidueName(_LIGAND_RESNAME)
+            info.SetIsHeteroAtom(True)
+            atom.SetMonomerInfo(info)
+
+        with io.StringIO(Chem.MolToPDBBlock(mol)) as buffer:
+            ligand = mda.Universe(buffer, topology_format="PDB").atoms
+
         return _rebuild(structure, structure.protein_atoms(), ligand)
 
     def _protonate_protein(self, structure: Structure) -> Structure:
-        # biotite is imported lazily so importing this module never requires it
         import biotite.structure.io.pdb as pdb_io
 
         source = pdb_io.PDBFile.read(io.StringIO(atoms_to_pdb_string(structure.protein_atoms())))
@@ -189,4 +189,5 @@ class ComplexProtonationTransformation(Transformation):
         out_file.set_structure(protonated)
         sink = io.StringIO()
         out_file.write(sink)
-        return _rebuild(structure, atoms_from_pdb_string(sink.getvalue()), structure.ligand_atoms())
+        reconstructed = mda.Universe(sink, topology_format="PDB")
+        return _rebuild(structure, reconstructed.atoms, structure.ligand_atoms())

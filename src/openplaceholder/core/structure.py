@@ -22,19 +22,27 @@ from openplaceholder.core.utils import _quiet_rdkit_warnings
 
 
 def atoms_to_pdb_string(atoms: mda.AtomGroup) -> str:
-    """Serialise an AtomGroup to a PDB string."""
-    buffer = io.StringIO()
-    with mda.Writer(buffer, format="PDB", n_atoms=len(atoms)) as writer:
-        writer.write(atoms)
-        # the MMCIF parser's default altLoc is a NUL byte that corrupts the
-        # fixed-width PDB columns MDAnalysis writes it into and breaks the PDB
-        # parsers downstream; scrub it on every round-trip
-        return buffer.getvalue().replace("\x00", " ")
+    """Serialise an AtomGroup to a PDB string.
 
+    Parameters
+    ----------
+    atoms
+        MDAnalysis AtomGroup to write to the PDB format.
 
-def atoms_from_pdb_string(block: str) -> mda.AtomGroup:
-    """Parse a PDB string into an MDAnalysis AtomGroup."""
-    return mda.Universe(io.StringIO(block), topology_format="PDB").atoms
+    Returns
+    -------
+    A string with the encoded PDB.
+
+    """
+    with io.StringIO() as buffer:
+        with mda.Writer(buffer, format="PDB", n_atoms=len(atoms)) as writer:
+            writer.write(atoms)
+            # grab value before the writer closes the buffer
+            s = buffer.getvalue()
+        # TODO: current mmcif parser might include incorrect null
+        # bytes. Once this is fixed, we can remove this conversion
+        # replacement
+        return s.replace("\x00", " ")
 
 
 def _attach_hydrogens(mol: Chem.Mol, heavy: mda.AtomGroup, hydrogens: mda.AtomGroup) -> Chem.Mol:
