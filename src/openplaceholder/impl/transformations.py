@@ -1,20 +1,4 @@
-"""Structure transformations that assemble co-folded complexes for FEP.
-
-Stacked (see ``core.pipeline.Pipeline`` / ``core.runner``): each takes the
-previous stage's ``list[Structure]`` and returns a new one, so a user can opt
-into only the stages they want.
-
-The substitution transformation gives every complex the *same* protein context
-(the canonical one), which makes the preparation and protonation transformations
-that follow order-independent -- they operate on every structure identically,
-with no positional/"index 0" special-casing. Because all proteins are then
-equal, preparing/protonating each one repeats the same work N times; that
-duplication is deliberate for now and a later PR can cache it away.
-
-Transformation output is always PDB: protonation adds hydrogens and CONECT
-records, so a hydrogenated PDB is the natural output format even if the co-folded
-input was MMCIF.
-"""
+"""Structure transformations that modify co-folded complexes for FEP."""
 
 import io
 from dataclasses import dataclass
