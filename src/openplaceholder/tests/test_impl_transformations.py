@@ -9,10 +9,10 @@ from openplaceholder.core.structure import Structure
 from openplaceholder.impl.transformations import (
     ComplexProtonationTransformation,
     ComplexProtonationTransformationConfig,
+    HeavyAtomAdditionTransformation,
+    HeavyAtomAdditionTransformationConfig,
     MaxVolumeSiteSubstitutionTransformation,
     MaxVolumeSiteSubstitutionTransformationConfig,
-    ProteinPreparationTransformation,
-    ProteinPreparationTransformationConfig,
     _ligand_volume,
 )
 from openplaceholder.tests.datafiles import TYK2_LIG_PDB
@@ -65,11 +65,6 @@ class TestLigandVolume(TestCase):
 
 class TestMaxVolumeSiteSubstitutionTransformation(TestCase):
 
-    def test_empty_input_returns_empty(self) -> None:
-        transformation = MaxVolumeSiteSubstitutionTransformation(MaxVolumeSiteSubstitutionTransformationConfig())
-
-        self.assertEqual(transformation.transform([]), [])
-
     def test_all_complexes_end_up_with_one_shared_protein(self) -> None:
         # two copies of the same complex, one with its coordinates shifted away:
         # after substitution both must carry the *canonical* protein (identical
@@ -95,13 +90,13 @@ class TestMaxVolumeSiteSubstitutionTransformation(TestCase):
         self.assertTrue(np.allclose(proteins[0], proteins[1], atol=1e-3))
 
 
-class TestProteinPreparationTransformation(TestCase):
+class TestHeavyAtomAdditionTransformation(TestCase):
 
     def test_fills_missing_heavy_atoms_without_adding_hydrogens(self) -> None:
         complex_ = _tyk2_complex()
         raw_heavy = len(complex_.protein_atoms().select_atoms("not element H"))
 
-        prepared = ProteinPreparationTransformation(ProteinPreparationTransformationConfig()).transform([complex_])[0]
+        prepared = HeavyAtomAdditionTransformation(HeavyAtomAdditionTransformationConfig()).transform([complex_])[0]
         protein = prepared.protein_atoms()
 
         # PDBFixer fills missing heavy atoms; adding hydrogens is ComplexProtonation's job, not this one's

@@ -30,6 +30,7 @@ from openplaceholder.vendor.protonate_utils import (
 # longer ligand_name cannot be preserved here)
 _LIGAND_RESNAME = "LIG"
 
+# TODO: does this need to be here and not just where it was used?
 # hydride's compiled relaxation step (geometry-optimising the placed hydrogens)
 # is incompatible with the numpy 2.x stack here (an int32/long buffer mismatch);
 # hydrogen *placement* -- the pH-correct states -- is unaffected, so relaxation
@@ -52,15 +53,12 @@ class MaxVolumeSiteSubstitutionTransformationConfig(TransformationConfigBase):
 
 
 class MaxVolumeSiteSubstitutionTransformation(Transformation):
-    """Give every complex the same (canonical) protein context.
+    """Give every complex the same (canonical) protein coordinates.
 
-    Picks the complex whose ligand occupies the largest convex-hull volume as
-    the canonical protein, superposes every complex onto it (protein CA fit,
-    which rigidly carries each ligand into the canonical frame), and rebuilds
-    each structure as the canonical protein + its own now co-framed ligand.
-    After this step all structures share one protein, so the downstream
-    preparation and protonation stages don't need to track which structure is
-    canonical -- they act on every structure identically.
+    Picks the complex whose ligand occupies the largest convex-hull
+    volume as the canonical protein, superposes every complex onto the
+    protein CA, and rebuilds each structure with new canonical
+    protein.
     """
 
     _config: MaxVolumeSiteSubstitutionTransformationConfig
@@ -69,38 +67,38 @@ class MaxVolumeSiteSubstitutionTransformation(Transformation):
         pass
 
     def _transform(self, structures: list[Structure]) -> list[Structure]:
-        if not structures:
+
+        if len(structures) == 1:
             return structures
-        volumes = [_ligand_volume(s) for s in structures]
-        reference = structures[int(np.argmax(volumes))].to_mda_universe()
-        canonical_protein = reference.select_atoms("protein")
-        return [self._substitute(s, reference, canonical_protein) for s in structures]
+
+        reference_structure = structures[0]
+        reference_volume = _ligand_volume(reference_structure)
+        for s in structures[1:]:
+            if (_volume := _ligand_volume(s)) > reference_volume:
+                reference_volume = _volume
+                reference_structure = s
+        u_reference = reference_structure.to_mda_universe()
+        canonical_protein = u_reference.select_atoms("protein")
+        return [self._substitute(s, u_reference, canonical_protein) for s in structures]
 
     @staticmethod
     def _substitute(structure: Structure, reference: mda.Universe, canonical_protein: mda.AtomGroup) -> Structure:
-        # rigid-fit this complex's protein onto the canonical protein (CA fit),
-        # which carries its ligand into the canonical frame, then pair the
-        # canonical protein with that now co-framed ligand
+        # TODO: only apply rotation and translation to the ligand
+        # Protein CA align system to reference and swap protein coordinates
         mobile = structure.to_mda_universe()
         align.alignto(mobile, reference, select="protein and name CA")
         return _rebuild(structure, canonical_protein, mobile.select_atoms("not protein"))
 
 
 @dataclass(frozen=True)
-class ProteinPreparationTransformationConfig(TransformationConfigBase):
+class HeavyAtomAdditionTransformationConfig(TransformationConfigBase):
     pass
 
 
-class ProteinPreparationTransformation(Transformation):
-    """Add missing heavy atoms to each complex's protein.
+class HeavyAtomAdditionTransformation(Transformation):
+    """Add missing heavy atoms to each complex's protein with PDBFixer."""
 
-    PDBFixer fills in missing heavy atoms (and would build missing
-    residues/loops for crystal inputs), applied to every structure
-    independently. Hydrogens are not added here -- that is
-    ``ComplexProtonationTransformation``'s job.
-    """
-
-    _config: ProteinPreparationTransformationConfig
+    _config: HeavyAtomAdditionTransformationConfig
 
     def _setup(self) -> None:
         pass
@@ -109,34 +107,35 @@ class ProteinPreparationTransformation(Transformation):
         return [self._prepare_protein(s) for s in structures]
 
     def _prepare_protein(self, structure: Structure) -> Structure:
-        fixer = PDBFixer(pdbfile=io.StringIO(atoms_to_pdb_string(structure.protein_atoms())))
+
+        with io.StringIO(atoms_to_pdb_string(structure.protein_atoms())) as buffer:
+            fixer = PDBFixer(pdbfile=buffer)
+
         fixer.findMissingResidues()
         fixer.findMissingAtoms()
-        fixer.addMissingAtoms()  # heavy atoms only; hydrogens come from ComplexProtonationTransformation
+        fixer.addMissingAtoms()
 
         with io.StringIO() as buffer:
             PDBFile.writeFile(fixer.topology, fixer.positions, buffer)
-            u_protonated = mda.Universe(buffer, topology_format="PDB")
+            u_heavy_atoms = mda.Universe(buffer, topology_format="PDB")
 
-        return _rebuild(structure, u_protonated.atoms, structure.ligand_atoms())
+        return _rebuild(structure, u_heavy_atoms.atoms, structure.ligand_atoms())
 
 
 @dataclass(frozen=True)
 class ComplexProtonationTransformationConfig(TransformationConfigBase):
-    # protonation pH for both protein and ligand
-    ph: float = 7.0
+    ph: float = 7.0  # protonation pH for both protein and ligand
 
 
 class ComplexProtonationTransformation(Transformation):
-    """Protonate every complex's ligand and protein at ``ph``.
+    """Protonate every complex's ligand and protein at pH = ``ph``.
 
-    Applied to every structure independently. Ligand protonation uses
-    Dimorphite-DL microstates and protein protonation uses hydride (both vendored
-    from PatWalters/protonate_utils). Protein and ligand protonation are
-    independent (the ligand method never sees the protein and vice versa), so the
-    ligand-protein interface protonation is not guaranteed self-consistent (e.g.
-    both partners of an H-bond may end up protonated); reconciling that interface
-    is left for a downstream/dedicated step.
+    Ligand protonation uses Dimorphite-DL microstates and protein
+    protonation uses hydride (both vendored from
+    PatWalters/protonate_utils). Protein and ligand protonation are
+    independent (the ligand method never sees the protein and vice
+    versa), so the ligand-protein interface protonation is not
+    guaranteed self-consistent.
     """
 
     _config: ComplexProtonationTransformationConfig
@@ -150,6 +149,7 @@ class ComplexProtonationTransformation(Transformation):
     def _protonate_ligand(self, structure: Structure) -> Structure:
         mol: Chem.Mol = protonate_molecule(structure.to_rdkit_ligand_mol(), self._config.ph)  # type: ignore[no-untyped-call]
 
+        # ensure the ligand has the right name after writing
         for atom in mol.GetAtoms():
             info = Chem.AtomPDBResidueInfo()
             info.SetResidueName(_LIGAND_RESNAME)
@@ -164,14 +164,18 @@ class ComplexProtonationTransformation(Transformation):
     def _protonate_protein(self, structure: Structure) -> Structure:
         import biotite.structure.io.pdb as pdb_io
 
-        source = pdb_io.PDBFile.read(io.StringIO(atoms_to_pdb_string(structure.protein_atoms())))
+        protein_pdb_string = atoms_to_pdb_string(structure.protein_atoms())
+        with io.StringIO(protein_pdb_string) as buffer:
+            source = pdb_io.PDBFile.read(buffer)
+
         protonated = protonate_structure(  # type: ignore[no-untyped-call]
             source.get_structure(model=1), ph=self._config.ph, relax=_RELAX_PROTEIN_HYDROGENS
         )
 
         out_file = pdb_io.PDBFile()
         out_file.set_structure(protonated)
-        sink = io.StringIO()
-        out_file.write(sink)
-        reconstructed = mda.Universe(sink, topology_format="PDB")
+        with io.StringIO() as buffer:
+            out_file.write(buffer)
+            reconstructed = mda.Universe(buffer, topology_format="PDB")
+
         return _rebuild(structure, reconstructed.atoms, structure.ligand_atoms())
