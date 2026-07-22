@@ -5,7 +5,6 @@ import contextlib
 import hashlib
 import io
 import json
-from collections.abc import Iterator
 from dataclasses import asdict, dataclass, fields, replace
 from enum import StrEnum
 from pathlib import Path
@@ -19,6 +18,7 @@ from rdkit.Chem import AllChem, rdDetermineBonds
 from rdkit.Geometry import Point3D
 
 from openplaceholder.core.serialization import JSONSerializable, to_shallow_dict
+from openplaceholder.core.utils import _quiet_rdkit_warnings
 
 
 def atoms_to_pdb_string(atoms: mda.AtomGroup) -> str:
@@ -37,44 +37,23 @@ def atoms_from_pdb_string(block: str) -> mda.AtomGroup:
     return mda.Universe(io.StringIO(block), topology_format="PDB").atoms
 
 
-@contextlib.contextmanager
-def _quiet_rdkit_warnings() -> Iterator[None]:
-    """Silence RDKit's C++ ``rdApp.warning`` logger for the duration of the block.
-
-    ``AssignBondOrdersFromTemplate`` logs "More than one matching pattern found
-    - picking one" whenever the template maps onto the perceived skeleton in more
-    than one way. Every ligand we handle contains a symmetric group (e.g. the
-    2,6-dichlorophenyl of the TYK2 series), so that is essentially always true
-    and the message fires once per call -- pure noise. Genuine failures are not
-    hidden: they raise, and we re-report them as ``LigandPerceptionError`` with
-    RDKit's own message attached.
-    """
-    from rdkit import RDLogger
-
-    RDLogger.DisableLog("rdApp.warning")  # type: ignore[attr-defined]
-    try:
-        yield
-    finally:
-        RDLogger.EnableLog("rdApp.warning")  # type: ignore[attr-defined]
-
-
-def _attach_hydrogens(mol: Chem.Mol, heavy: "mda.AtomGroup", hydrogens: "mda.AtomGroup") -> Chem.Mol:
+def _attach_hydrogens(mol: Chem.Mol, heavy: mda.AtomGroup, hydrogens: mda.AtomGroup) -> Chem.Mol:
     """Add `hydrogens` to a perceived heavy-atom `mol`, keeping their real coordinates.
 
-    Each hydrogen is bonded to its nearest heavy atom, which is unambiguous (the
-    next-nearest is far outside bonding range). Doing it this way keeps hydrogens
-    out of ``DetermineConnectivity`` and the template match, where they perturb
-    the mapping and produce spurious valence errors.
+    Each hydrogen is bonded to its nearest heavy atom. Doing it this
+    way keeps hydrogens out of ``DetermineConnectivity`` and the
+    template match, where they perturb the mapping and produce
+    spurious valence errors.
     """
     editable = Chem.RWMol(mol)
     positions = [list(mol.GetConformer().GetAtomPosition(i)) for i in range(mol.GetNumAtoms())]
     for hydrogen in hydrogens:
-        parent = int(np.argmin(np.linalg.norm(heavy.positions - hydrogen.position, axis=1)))
-        editable.AddBond(parent, editable.AddAtom(Chem.Atom(1)), Chem.BondType.SINGLE)
-        positions.append(list(hydrogen.position.astype(float)))
+        parent_index = int(np.argmin(np.linalg.norm(heavy.positions - hydrogen.position, axis=1)))
+        editable.AddBond(parent_index, editable.AddAtom(Chem.Atom(1)), Chem.BondType.SINGLE)
+        positions.append(list(hydrogen.position.astype(np.float64)))
 
-    # the hydrogens are explicit now, so they -- not the perceived valence --
-    # decide each heavy atom's hydrogen count
+    # the hydrogens are explicit now, decide each heavy atom's
+    # hydrogen count
     for mol_atom in editable.GetAtoms():
         if mol_atom.GetAtomicNum() > 1:
             mol_atom.SetNoImplicit(True)
@@ -99,7 +78,7 @@ class LigandPerceptionError(Exception):
 
     Distance-based bond perception on a distorted predicted pose can yield a
     connectivity graph that the SMILES template will not map onto; such a pose
-    is chemically unusable and should be filtered out rather than crash a run.
+    is chemically unusable.
     """
 
 
@@ -183,6 +162,7 @@ class Structure(JSONSerializable):
         to override, e.g. ``f"resname {self.ligand_name}"`` to isolate one
         residue from other heteroatoms.
         """
+
         ligand = self.to_mda_universe().select_atoms(selection or "not protein")
         if not len(ligand):
             raise LigandPerceptionError(f"no atoms selected for ligand '{self.ligand_name}'")
@@ -206,6 +186,9 @@ class Structure(JSONSerializable):
             template = Chem.MolFromSmiles(self.ligand_smiles)
             if template is None:
                 raise LigandPerceptionError(f"could not parse ligand_smiles {self.ligand_smiles!r}")
+
+            # most systems we handle will have a symmetric group, producing excessive
+            # rdkit warnings about multiple matching patterns.
             with _quiet_rdkit_warnings():
                 mol = AllChem.AssignBondOrdersFromTemplate(template, mol)  # type: ignore[no-untyped-call]
 
