@@ -38,7 +38,8 @@ test = [
 ]
 dev = [
     "openplaceholder[test]",
-    "pdbpp"
+    "pdbpp",
+    "flake8"
 ]
 docs = [
      "sphinx"
