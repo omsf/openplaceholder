@@ -1,18 +1,18 @@
-from dataclasses import dataclass
 import logging
+from dataclasses import dataclass
 from io import StringIO
 
-from gufe import AlchemicalNetwork, LigandNetwork, Protocol
-import openfe
-from openfe.setup.alchemical_network_planner import RBFEAlchemicalNetworkPlanner
-
-from openff.units import unit
 import MDAnalysis as mda
+import openfe
+from gufe import AlchemicalNetwork, LigandNetwork, Protocol
+from openfe.setup.alchemical_network_planner import RBFEAlchemicalNetworkPlanner
+from openff.units import unit
 
 from openplaceholder.core.assembly.mapper import Mapper, MapperConfigBase
-from openplaceholder.core.structure import Structure, LigandPerceptionError
+from openplaceholder.core.structure import Structure
 
 logger = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True)
 class LOMAPMapperConfig(MapperConfigBase): ...
@@ -28,9 +28,11 @@ class LOMAPMapper(Mapper):
     def _map(self, structures: list[Structure]) -> AlchemicalNetwork:
         raise NotImplementedError
 
+
 @dataclass(frozen=True)
 class KartografMapperConfig(MapperConfigBase):
     pass
+
 
 class KartografMapper(Mapper):
 
@@ -42,9 +44,7 @@ class KartografMapper(Mapper):
     def _map(self, structures: list[Structure]) -> AlchemicalNetwork:
         ligand_network = self._create_ligand_network(structures)
 
-        solvent = openfe.SolventComponent(
-            ion_concentration=0.15 * unit.molar
-        )
+        solvent = openfe.SolventComponent(ion_concentration=0.15 * unit.molar)
         protein = self._extract_protein(structures[0])
         planner = RBFEAlchemicalNetworkPlanner()
 
@@ -68,6 +68,7 @@ class KartografMapper(Mapper):
     @staticmethod
     def _create_protocol() -> Protocol:
         from openfe import RelativeHybridTopologyProtocol
+
         return RelativeHybridTopologyProtocol(RelativeHybridTopologyProtocol.default_settings())
 
     @staticmethod
@@ -85,8 +86,8 @@ class KartografMapper(Mapper):
         scorer = openfe.lomap_scorers.default_lomap_score
 
         network = openfe.ligand_network_planning.generate_minimal_spanning_network(
-            ligands = ligands,
-            mappers = mappers,
-            scorer = scorer,
+            ligands=ligands,
+            mappers=mappers,
+            scorer=scorer,
         )
         return network

@@ -12,6 +12,7 @@ from openplaceholder.core.structure import LigandPerceptionError, Structure
 
 logger = logging.getLogger(__name__)
 
+
 @cache
 def _perceive_ligand(structure: Structure) -> Chem.Mol | None:
     """Reconstruct the ligand mol, or None (with a warning) when a distorted

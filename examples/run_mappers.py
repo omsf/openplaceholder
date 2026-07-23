@@ -2,8 +2,8 @@ import logging
 import tomllib
 from pathlib import Path
 
-from openplaceholder.core.structure import StructureSet
 from openplaceholder.core.resolver import _build_plugin
+from openplaceholder.core.structure import StructureSet
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger("OPH-RUN-MAPPER")
@@ -21,7 +21,9 @@ if __name__ == "__main__":
 
     post_transformation_structures = StructureSet.from_file("post_transformation_structures.json")
 
-    logger.info("Read post-transformation structures from disk: %d structures found", len(post_transformation_structures))
+    logger.info(
+        "Read post-transformation structures from disk: %d structures found", len(post_transformation_structures)
+    )
 
     network = mapper.map(post_transformation_structures)
     network.to_json("network.json")

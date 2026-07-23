@@ -2,7 +2,6 @@
 
 import logging
 from pathlib import Path
-import logging
 
 from openplaceholder.core.resolver import resolve_pipeline
 from openplaceholder.core.runner import run_serial

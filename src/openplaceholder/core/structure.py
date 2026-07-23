@@ -4,12 +4,12 @@ import base64
 import hashlib
 import io
 import json
+import logging
 from dataclasses import asdict, dataclass, fields, replace
 from enum import StrEnum
-from pathlib import Path
-from typing import Any, Self
-import logging
 from functools import cache
+from pathlib import Path
+from typing import Any, Iterator, Self
 
 import MDAnalysis as mda
 import numpy as np
@@ -22,6 +22,7 @@ from openplaceholder.core.serialization import JSONSerializable, to_shallow_dict
 from openplaceholder.core.utils import _quiet_rdkit_warnings
 
 logger = logging.getLogger(__name__)
+
 
 def atoms_to_pdb_string(atoms: mda.AtomGroup) -> str:
     """Serialise an AtomGroup to a PDB string.
@@ -64,7 +65,7 @@ def _attach_hydrogens(mol: Chem.Mol, heavy: mda.AtomGroup, hydrogens: mda.AtomGr
 
     # the hydrogens are explicit now, decide each heavy atom's
     # hydrogen count
-    for mol_atom in editable.GetAtoms():
+    for mol_atom in editable.GetAtoms():  # type: ignore
         if mol_atom.GetAtomicNum() > 1:
             mol_atom.SetNoImplicit(True)
             mol_atom.SetNumExplicitHs(0)
@@ -204,7 +205,7 @@ class Structure(JSONSerializable):
             # clear it so sanitization fills valences (and hydrogen counts) from
             # the now-correct bond orders.
             editable = Chem.RWMol(mol)
-            for mol_atom in editable.GetAtoms():
+            for mol_atom in editable.GetAtoms():  # type: ignore
                 mol_atom.SetNoImplicit(False)
                 mol_atom.SetNumExplicitHs(0)
                 mol_atom.SetNumRadicalElectrons(0)
@@ -291,8 +292,8 @@ class StructureSet(JSONSerializable):
     def __len__(self) -> int:
         return len(self.structures)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[Structure]:
         yield from self.structures
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: int) -> Structure:
         return self.structures[key]
