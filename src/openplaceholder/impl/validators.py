@@ -1,5 +1,6 @@
 import logging
 from dataclasses import dataclass
+from functools import cache
 
 from MDAnalysis.guesser.tables import vdwradii
 from MDAnalysis.lib.distances import self_capped_distance
@@ -11,12 +12,11 @@ from openplaceholder.core.structure import LigandPerceptionError, Structure
 
 logger = logging.getLogger(__name__)
 
-
+@cache
 def _perceive_ligand(structure: Structure) -> Chem.Mol | None:
     """Reconstruct the ligand mol, or None (with a warning) when a distorted
     pose can't be perceived -- so validators drop it instead of crashing down the road."""
 
-    # TODO: cache these
     try:
         return structure.to_rdkit_ligand_mol()
     except LigandPerceptionError as exc:

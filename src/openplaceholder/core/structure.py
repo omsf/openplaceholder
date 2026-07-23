@@ -9,6 +9,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, Self
 import logging
+from functools import cache
 
 import MDAnalysis as mda
 import numpy as np
@@ -134,8 +135,8 @@ class Structure(JSONSerializable):
     def decode_structure_data(self) -> bytes:
         return base64.b64decode(self.structure_data.encode("utf-8"))
 
+    @cache
     def to_mda_universe(self) -> Universe:
-        # TODO: cache the results
         match self.structure_format:
             case StructureFormat.PDB:
                 stream = io.StringIO(self.decode_structure_data().decode())
@@ -149,6 +150,7 @@ class Structure(JSONSerializable):
                 )
         return mda.Universe(stream, topology_format=topology_format)
 
+    @cache
     def to_rdkit_ligand_mol(self, selection: str | None = None) -> Chem.Mol:
         """Build an RDKit Mol for the ligand.
 
@@ -224,9 +226,11 @@ class Structure(JSONSerializable):
             raise LigandPerceptionError(f"could not perceive ligand '{self.ligand_name}' from its pose: {exc}") from exc
         return mol
 
+    @cache
     def protein_atoms(self) -> mda.AtomGroup:
         return self.to_mda_universe().select_atoms("protein")
 
+    @cache
     def ligand_atoms(self) -> mda.AtomGroup:
         return self.to_mda_universe().select_atoms("not protein")
 
