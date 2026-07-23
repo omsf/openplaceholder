@@ -1,5 +1,4 @@
 from importlib import resources
-from pathlib import Path
 
 __all__ = [
     "TYK2_LIG_PDB",

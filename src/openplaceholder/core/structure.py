@@ -1,7 +1,6 @@
 """Structure definitions."""
 
 import base64
-import contextlib
 import hashlib
 import io
 import json

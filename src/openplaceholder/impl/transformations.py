@@ -4,7 +4,6 @@ import io
 from dataclasses import dataclass
 
 import MDAnalysis as mda
-import numpy as np
 from MDAnalysis.analysis import align
 from openmm.app import PDBFile
 from pdbfixer import PDBFixer
