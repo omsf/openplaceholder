@@ -9,3 +9,6 @@ class TestStereoValidator(unittest.TestCase):
         config = StereoValidatorConfig()
         assert config.require_inchi_match is True
         assert config.require_smiles_match is True
+
+    def test_initialization(self) -> None:
+        StereoValidator(StereoValidatorConfig())

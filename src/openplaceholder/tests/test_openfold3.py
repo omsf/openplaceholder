@@ -10,7 +10,6 @@ from openplaceholder.impl.generator.openfold3 import (
 
 
 def generate_fake_run_output(gen_dir: Path, n_seeds: int, n_diffusion_samples: int, ligands: dict[str, str]) -> None:
-    import pathlib
     import random
 
     padded = lambda s: f"{s:0>2}"

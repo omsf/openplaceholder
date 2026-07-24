@@ -141,7 +141,7 @@ experiment_settings:
         cmd = self._build_subprocess_command()
         with subprocess.Popen(cmd, cwd=self._config.generator_directory) as proc:
             # TODO check output
-            output = proc.wait()
+            _ = proc.wait()
 
     def _run_openfold_in_process(self) -> None:
         # avoid implementing this for now: it would mean calling OpenFold3's
@@ -155,7 +155,6 @@ experiment_settings:
         artifacts = []
 
         output_dir = Path(self._config.generator_directory) / "output"
-        sequence = self._config.sequence
         queries = self._query_map()["queries"]
 
         for query_name, query in queries.items():

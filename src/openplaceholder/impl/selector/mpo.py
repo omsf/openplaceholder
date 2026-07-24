@@ -192,7 +192,7 @@ class MPOSelector(Selector):
         if result.x is None:
             raise RuntimeError(f"selection optimization failed: {result.message}")
 
-        return np.flatnonzero(np.round(result.x[:n])).tolist()
+        return [int(i) for i in np.flatnonzero(np.round(result.x[:n]))]
 
     @staticmethod
     def _pair_objective(

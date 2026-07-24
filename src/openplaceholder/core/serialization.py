@@ -1,6 +1,5 @@
 import json
 from abc import ABC, abstractmethod
-from dataclasses import asdict
 from typing import Any, Self
 
 _JSON_SERDE_CLASS_REGISTRY: dict[str, "type[JSONSerializable]"] = {}

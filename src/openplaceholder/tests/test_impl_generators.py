@@ -19,7 +19,7 @@ class TestOpenFold3Generator(TestCase):
 
     def test_init(self) -> None:
 
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory():
             config = OpenFold3GeneratorConfig(
                 sequence="ABC",
                 ligands={"methane": "C", "ethane": "CC", "propane": "CCC"},
