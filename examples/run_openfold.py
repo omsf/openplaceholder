@@ -1,19 +1,18 @@
 #!/usr/bin/env python3
 
-import os
-import random
-from pathlib import Path
-import tomllib
 import logging
+import os
+import tomllib
+from pathlib import Path
 
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger("run_openfold.py")
-
+from openplaceholder.impl.generator.archiver import JSONArchiver, JSONArchiverConfig
 from openplaceholder.impl.generator.openfold3 import (
     OpenFold3Generator,
     OpenFold3GeneratorConfig,
 )
-from openplaceholder.impl.generator.archiver import JSONArchiver, JSONArchiverConfig
+
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger("run_openfold.py")
 
 TOML_CONFIG = Path(__file__).parents[1] / "config.toml"
 
@@ -35,7 +34,6 @@ if __name__ == "__main__":
 
     if not generator_config["implementation"] == "openplaceholder.impl.generator.openfold3:OpenFold3Generator":
         raise ValueError("This script is only configured to run the OpenFold3Generator")
-
 
     # in theory you could double splat these into the
     # OpenFold3Generator, but it's explicitly unpacked here for

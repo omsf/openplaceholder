@@ -7,6 +7,7 @@ from openplaceholder.core.structure import Structure, StructureSet
 
 logger = logging.getLogger(__name__)
 
+
 def run_serial(pipeline: Pipeline) -> AlchemicalNetwork:
     """Naive and simple implementation for running a pipeline.
 
