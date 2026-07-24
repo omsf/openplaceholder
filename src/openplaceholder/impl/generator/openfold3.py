@@ -119,6 +119,9 @@ model_update:
         eval:
           use_deepspeed_evo_attention: false
 
+output_writer_settings:
+  structure_format: pdb
+
 experiment_settings:
   seeds:
 """
