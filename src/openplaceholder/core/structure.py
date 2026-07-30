@@ -259,6 +259,9 @@ class Structure(JSONSerializable):
 
 @dataclass(frozen=True)
 class StructureSet(JSONSerializable):
+    """A list of Structure instances with convenience methods for serialization.
+    """
+
     structures: list[Structure]
 
     def __post_init__(self) -> None:

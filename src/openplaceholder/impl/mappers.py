@@ -85,6 +85,7 @@ class KartografMapper(Mapper):
         mappers = [openfe.setup.KartografAtomMapper()]
         scorer = openfe.lomap_scorers.default_lomap_score
 
+        # TODO: try generate_lomap_network
         network = openfe.ligand_network_planning.generate_minimal_spanning_network(
             ligands=ligands,
             mappers=mappers,
