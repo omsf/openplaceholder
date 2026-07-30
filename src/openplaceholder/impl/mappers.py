@@ -4,7 +4,7 @@ from io import StringIO
 
 import MDAnalysis as mda
 import openfe
-from gufe import AlchemicalNetwork, LigandNetwork, Protocol
+from gufe import AlchemicalNetwork, LigandNetwork
 from openfe.setup.alchemical_network_planner import RBFEAlchemicalNetworkPlanner
 from openff.units import unit
 
@@ -19,7 +19,6 @@ class LOMAPMapperConfig(MapperConfigBase): ...
 
 
 class LOMAPMapper(Mapper):
-
     _config: LOMAPMapperConfig
 
     def _setup(self) -> None:
@@ -35,19 +34,23 @@ class KartografMapperConfig(MapperConfigBase):
 
 
 class KartografMapper(Mapper):
-
     _config: KartografMapperConfig
 
     def _setup(self) -> None:
         pass
 
     def _map(self, structures: list[Structure]) -> AlchemicalNetwork:
-        ligand_network = self._create_ligand_network(structures)
-
-        solvent = openfe.SolventComponent(ion_concentration=0.15 * unit.molar)
-        protein = self._extract_protein(structures[0])
+        ligand_network: LigandNetwork = self._create_ligand_network(structures)
+        solvent = openfe.SolventComponent(
+            ion_concentration=0.15 * unit.molar,
+            positive_ion="Na",
+            negative_ion="Cl",
+            neutralize=True,
+        )
+        protein: openfe.ProteinComponent = self._extract_protein(structures[0])
+        # This chooses RelativeHybridTopologyProtocol, along with its
+        # default settings, by default
         planner = RBFEAlchemicalNetworkPlanner()
-
         alchemical_network = planner(
             ligands=ligand_network.nodes,
             solvent=solvent,
@@ -57,22 +60,23 @@ class KartografMapper(Mapper):
 
     @staticmethod
     def _extract_protein(structure: Structure) -> openfe.ProteinComponent:
-        atoms = structure.protein_atoms()
+        """Construct a ProteinComponent from the Structure's embedded structure data."""
+        protein_atoms = structure.protein_atoms()
         buffer = StringIO()
-        with mda.Writer(buffer, format="PDB", n_atoms=len(atoms)) as writer:
-            writer.write(atoms)
+        with mda.Writer(buffer, format="PDB", n_atoms=len(protein_atoms)) as writer:
+            writer.write(protein_atoms)
             buffer.seek(0)
             contents = openfe.ProteinComponent.from_pdb_file(buffer)
         return contents
 
     @staticmethod
-    def _create_protocol() -> Protocol:
-        from openfe import RelativeHybridTopologyProtocol
-
-        return RelativeHybridTopologyProtocol(RelativeHybridTopologyProtocol.default_settings())
-
-    @staticmethod
     def _create_ligand_network(structures: list[Structure]) -> LigandNetwork:
+        """Create a ligand network from a list of provided structures.
+
+        Ligands contained in the structures are extracted, converted
+        to SmallMoleculeComponents, and used to plan a LigandNetwork
+        using the Kartograf atom mapper.
+        """
         ligands = []
         logger.debug("building ligand network from %d structures", len(structures))
         for structure in structures:

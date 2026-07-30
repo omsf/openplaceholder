@@ -259,8 +259,7 @@ class Structure(JSONSerializable):
 
 @dataclass(frozen=True)
 class StructureSet(JSONSerializable):
-    """A list of Structure instances with convenience methods for serialization.
-    """
+    """A list of Structure instances with convenience methods for serialization."""
 
     structures: list[Structure]
 
