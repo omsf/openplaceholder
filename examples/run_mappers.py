@@ -16,6 +16,7 @@ if __name__ == "__main__":
         raise FileNotFoundError(f"Could not find {TOML_CONFIG}")
     config = tomllib.loads(TOML_CONFIG.read_text())
 
+    # use the plugin builder machinery to simplify mapper creation
     mapper = _build_plugin(config["assembly"]["mapping"])
     logger.info("Created plugin instance, %s", mapper)
 

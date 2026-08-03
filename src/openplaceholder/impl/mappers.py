@@ -25,6 +25,7 @@ class LOMAPMapper(Mapper):
         pass
 
     def _map(self, structures: list[Structure]) -> AlchemicalNetwork:
+        _ = structures
         raise NotImplementedError
 
 
@@ -34,6 +35,8 @@ class KartografMapperConfig(MapperConfigBase):
 
 
 class KartografMapper(Mapper):
+    """A Mapper that uses the Kartograf atom mapper for network planning."""
+
     _config: KartografMapperConfig
 
     def _setup(self) -> None:

@@ -9,7 +9,7 @@ from dataclasses import asdict, dataclass, fields, replace
 from enum import StrEnum
 from functools import cache
 from pathlib import Path
-from typing import Any, Iterator, Self
+from typing import Any, Iterator, Self, cast
 
 import MDAnalysis as mda
 import numpy as np
@@ -105,14 +105,33 @@ class StructureFormat(StrEnum):
         return f".{self.value.lower()}"
 
     @classmethod
-    def from_suffix(cls, suffix: str) -> Self:
+    def from_suffix(cls, suffix: str) -> "StructureFormat":
+        """Determine and return the StructureFormat from a suffix.
+
+        Note that this assumes the creator of the file paired the
+        correct suffix and format when writing the file. No validation
+        is performed.
+
+        Parameters
+        ----------
+        suffix
+            The suffix string for StructureFormat determination.
+
+        Returns
+        -------
+        StructureFormat
+
+        Raises
+        ------
+        UnsupportedFormatError
+        """
         match suffix.lower():
             case ".mmcif" | ".cif":
                 return cls.MMCIF
             case ".pdb":
                 return cls.PDB
             case _:
-                raise ValueError(f"Unsupported structure suffix: '{suffix}'")
+                raise UnsupportedFormatError(f"Unsupported structure suffix: '{suffix}'")
 
 
 @dataclass(frozen=True)
@@ -131,6 +150,7 @@ class Structure(JSONSerializable):
         return hashlib.sha256("\x00".join(parts).encode()).hexdigest()
 
     def same_complex(self, other: Self) -> bool:
+        _ = other
         raise NotImplementedError
 
     def decode_structure_data(self) -> bytes:
@@ -138,6 +158,25 @@ class Structure(JSONSerializable):
 
     @cache
     def to_mda_universe(self) -> Universe:
+        """Build an MDAnalysis Universe from the structure data.
+
+        MDAnalysis usually guesses file formats from the suffix of a
+        file. Since a ``Structure`` instance holds raw bytes of a
+        structure, the ``Structure.structure_format`` is used in leiu
+        of a file suffix.
+
+        This is a cached function.
+
+        Returns
+        -------
+        Universe
+            An MDAnalysis constructed constructed from the
+            ``structure_data`` and ``structure_format``.
+
+        Raises
+        ------
+        UnsupportedFormat
+        """
         match self.structure_format:
             case StructureFormat.PDB:
                 stream = io.StringIO(self.decode_structure_data().decode())
@@ -167,6 +206,24 @@ class Structure(JSONSerializable):
         coordinates. By default (optionally overrided by
         ``selection``) the ligand is everything that isn't
         protein. Any hydrogens it has are kept.
+
+        This is a cached function.
+
+        Parameters
+        ----------
+        selection
+            An optional string for atom selection.
+
+        Returns
+        -------
+        Chem.Mol
+
+        Raises
+        ------
+        LigandPerceptionError
+            The ligand was either not recoverable from the MDAnalysis
+            Universe or RDKit was unable to fully process the ligand.
+
         """
 
         ligand = self.to_mda_universe().select_atoms(selection or "not protein")
@@ -191,7 +248,7 @@ class Structure(JSONSerializable):
         try:
             rdDetermineBonds.DetermineConnectivity(mol)
 
-            template = Chem.MolFromSmiles(self.ligand_smiles)
+            template = cast(Chem.Mol | None, Chem.MolFromSmiles(self.ligand_smiles))
             if template is None:
                 raise LigandPerceptionError(f"could not parse ligand_smiles {self.ligand_smiles!r}")
 
