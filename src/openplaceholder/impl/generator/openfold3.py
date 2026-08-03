@@ -16,6 +16,7 @@ from openplaceholder.core.generation.generator import (
 from openplaceholder.core.structure import (
     Structure,
     StructureFormat,
+    UnsupportedFormatError,
 )
 
 logger = logging.getLogger(__name__)
@@ -175,7 +176,7 @@ experiment_settings:
             for output_file in query_output.rglob("*"):
                 try:
                     structure_format = StructureFormat.from_suffix(output_file.suffix)
-                except ValueError:
+                except UnsupportedFormatError:
                     continue
 
                 raw = output_file.read_bytes()

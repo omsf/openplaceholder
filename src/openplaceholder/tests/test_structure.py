@@ -12,6 +12,7 @@ from openplaceholder.core.structure import (
     Structure,
     StructureFormat,
     StructureSet,
+    UnsupportedFormatError,
 )
 from openplaceholder.tests.datafiles import TYK2_LIG_PDB
 from openplaceholder.tests.helpers import make_structures, read_gzip_file
@@ -58,7 +59,7 @@ class TestStructureFormat(TestCase):
         assert StructureFormat.from_suffix(".MMCIF") is StructureFormat.MMCIF
 
     def test_from_suffix_invalid(self) -> None:
-        with self.assertRaises(ValueError):
+        with self.assertRaises(UnsupportedFormatError):
             StructureFormat.from_suffix(".ficmm")
 
 
