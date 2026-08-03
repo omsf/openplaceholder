@@ -30,10 +30,6 @@ def alchemicalnetwork_to_ligands_sdf(network: AlchemicalNetwork, writable: TextI
 
     _check_writable(writable)
 
-    systems = set()
-    for chem_system in network.nodes:
-        systems.add(chem_system)
-
     complex_cs = {cs for cs in network.nodes if "complex" in cs.name}
     for cs in complex_cs:
         smc: SmallMoleculeComponent = cast(SmallMoleculeComponent, cs.components["ligand"])
