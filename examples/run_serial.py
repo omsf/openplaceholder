@@ -10,6 +10,8 @@ logging.basicConfig(level=logging.INFO)
 
 TOML_CONFIG = Path(__file__).parents[1] / "config.toml"
 
+logging.basicConfig(level=logging.INFO)
+
 if __name__ == "__main__":
     pipeline = resolve_pipeline(TOML_CONFIG)
     result = run_serial(pipeline)

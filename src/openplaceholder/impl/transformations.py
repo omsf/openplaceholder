@@ -149,7 +149,7 @@ class ComplexProtonationTransformation(Transformation):
         mol: Chem.Mol = protonate_molecule(structure.to_rdkit_ligand_mol(), self._config.ph)  # type: ignore[no-untyped-call]
 
         # ensure the ligand has the right name after writing
-        for atom in mol.GetAtoms():
+        for atom in mol.GetAtoms():  # type: ignore
             info = Chem.AtomPDBResidueInfo()
             info.SetResidueName(_LIGAND_RESNAME)
             info.SetIsHeteroAtom(True)

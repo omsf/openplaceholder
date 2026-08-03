@@ -4,10 +4,12 @@ import base64
 import hashlib
 import io
 import json
+import logging
 from dataclasses import asdict, dataclass, fields, replace
 from enum import StrEnum
+from functools import cache
 from pathlib import Path
-from typing import Any, Self
+from typing import Any, Iterator, Self, cast
 
 import MDAnalysis as mda
 import numpy as np
@@ -18,6 +20,8 @@ from rdkit.Geometry import Point3D
 
 from openplaceholder.core.serialization import JSONSerializable, to_shallow_dict
 from openplaceholder.core.utils import _quiet_rdkit_warnings
+
+logger = logging.getLogger(__name__)
 
 
 def atoms_to_pdb_string(atoms: mda.AtomGroup) -> str:
@@ -61,7 +65,7 @@ def _attach_hydrogens(mol: Chem.Mol, heavy: mda.AtomGroup, hydrogens: mda.AtomGr
 
     # the hydrogens are explicit now, decide each heavy atom's
     # hydrogen count
-    for mol_atom in editable.GetAtoms():
+    for mol_atom in editable.GetAtoms():  # type: ignore
         if mol_atom.GetAtomicNum() > 1:
             mol_atom.SetNoImplicit(True)
             mol_atom.SetNumExplicitHs(0)
@@ -101,14 +105,33 @@ class StructureFormat(StrEnum):
         return f".{self.value.lower()}"
 
     @classmethod
-    def from_suffix(cls, suffix: str) -> Self:
+    def from_suffix(cls, suffix: str) -> "StructureFormat":
+        """Determine and return the StructureFormat from a suffix.
+
+        Note that this assumes the creator of the file paired the
+        correct suffix and format when writing the file. No validation
+        is performed.
+
+        Parameters
+        ----------
+        suffix
+            The suffix string for StructureFormat determination.
+
+        Returns
+        -------
+        StructureFormat
+
+        Raises
+        ------
+        UnsupportedFormatError
+        """
         match suffix.lower():
             case ".mmcif" | ".cif":
                 return cls.MMCIF
             case ".pdb":
                 return cls.PDB
             case _:
-                raise ValueError(f"Unsupported structure suffix: '{suffix}'")
+                raise UnsupportedFormatError(f"Unsupported structure suffix: '{suffix}'")
 
 
 @dataclass(frozen=True)
@@ -127,13 +150,33 @@ class Structure(JSONSerializable):
         return hashlib.sha256("\x00".join(parts).encode()).hexdigest()
 
     def same_complex(self, other: Self) -> bool:
+        _ = other
         raise NotImplementedError
 
     def decode_structure_data(self) -> bytes:
         return base64.b64decode(self.structure_data.encode("utf-8"))
 
+    @cache
     def to_mda_universe(self) -> Universe:
-        # TODO: cache the results
+        """Build an MDAnalysis Universe from the structure data.
+
+        MDAnalysis usually guesses file formats from the suffix of a
+        file. Since a ``Structure`` instance holds raw bytes of a
+        structure, the ``Structure.structure_format`` is used in leiu
+        of a file suffix.
+
+        This is a cached function.
+
+        Returns
+        -------
+        Universe
+            An MDAnalysis constructed constructed from the
+            ``structure_data`` and ``structure_format``.
+
+        Raises
+        ------
+        UnsupportedFormat
+        """
         match self.structure_format:
             case StructureFormat.PDB:
                 stream = io.StringIO(self.decode_structure_data().decode())
@@ -147,6 +190,7 @@ class Structure(JSONSerializable):
                 )
         return mda.Universe(stream, topology_format=topology_format)
 
+    @cache
     def to_rdkit_ligand_mol(self, selection: str | None = None) -> Chem.Mol:
         """Build an RDKit Mol for the ligand.
 
@@ -162,6 +206,24 @@ class Structure(JSONSerializable):
         coordinates. By default (optionally overrided by
         ``selection``) the ligand is everything that isn't
         protein. Any hydrogens it has are kept.
+
+        This is a cached function.
+
+        Parameters
+        ----------
+        selection
+            An optional string for atom selection.
+
+        Returns
+        -------
+        Chem.Mol
+
+        Raises
+        ------
+        LigandPerceptionError
+            The ligand was either not recoverable from the MDAnalysis
+            Universe or RDKit was unable to fully process the ligand.
+
         """
 
         ligand = self.to_mda_universe().select_atoms(selection or "not protein")
@@ -172,6 +234,8 @@ class Structure(JSONSerializable):
         # selected are re-attached afterwards (see _attach_hydrogens)
         heavy = ligand.select_atoms("not element H")
         hydrogens = ligand.select_atoms("element H")
+
+        logger.debug("Found %d atoms for ligand %s", len(ligand), self.ligand_name)
 
         editable = Chem.RWMol()
         conformer = Chem.Conformer(len(heavy))
@@ -184,7 +248,7 @@ class Structure(JSONSerializable):
         try:
             rdDetermineBonds.DetermineConnectivity(mol)
 
-            template = Chem.MolFromSmiles(self.ligand_smiles)
+            template = cast(Chem.Mol | None, Chem.MolFromSmiles(self.ligand_smiles))
             if template is None:
                 raise LigandPerceptionError(f"could not parse ligand_smiles {self.ligand_smiles!r}")
 
@@ -198,7 +262,7 @@ class Structure(JSONSerializable):
             # clear it so sanitization fills valences (and hydrogen counts) from
             # the now-correct bond orders.
             editable = Chem.RWMol(mol)
-            for mol_atom in editable.GetAtoms():
+            for mol_atom in editable.GetAtoms():  # type: ignore
                 mol_atom.SetNoImplicit(False)
                 mol_atom.SetNumExplicitHs(0)
                 mol_atom.SetNumRadicalElectrons(0)
@@ -220,9 +284,11 @@ class Structure(JSONSerializable):
             raise LigandPerceptionError(f"could not perceive ligand '{self.ligand_name}' from its pose: {exc}") from exc
         return mol
 
+    @cache
     def protein_atoms(self) -> mda.AtomGroup:
         return self.to_mda_universe().select_atoms("protein")
 
+    @cache
     def ligand_atoms(self) -> mda.AtomGroup:
         return self.to_mda_universe().select_atoms("not protein")
 
@@ -250,6 +316,8 @@ class Structure(JSONSerializable):
 
 @dataclass(frozen=True)
 class StructureSet(JSONSerializable):
+    """A list of Structure instances with convenience methods for serialization."""
+
     structures: list[Structure]
 
     def __post_init__(self) -> None:
@@ -282,3 +350,9 @@ class StructureSet(JSONSerializable):
 
     def __len__(self) -> int:
         return len(self.structures)
+
+    def __iter__(self) -> Iterator[Structure]:
+        yield from self.structures
+
+    def __getitem__(self, key: int) -> Structure:
+        return self.structures[key]

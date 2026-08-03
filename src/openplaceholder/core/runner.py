@@ -30,6 +30,7 @@ def run_serial(pipeline: Pipeline) -> AlchemicalNetwork:
         logger.info(f"Performing validation for {artifact.ligand_name}")
 
         for validator in pipeline.validators:
+            logger.info("applying validator: %s", validator.__class__.__name__)
             structures = validator.validate_structures(structures)
 
         if not structures:
@@ -42,7 +43,9 @@ def run_serial(pipeline: Pipeline) -> AlchemicalNetwork:
     # full collection rather than per-ligand.
     selected_structures = selector.select(structure_sets)
 
+    logger.info("applying transformations")
     for transformation in transformations:
+        logger.info("applying transformation: %s", transformation.__class__.__name__)
         selected_structures = transformation.transform(selected_structures)
 
     # TODO: technically not the last step, but will leave this here for now

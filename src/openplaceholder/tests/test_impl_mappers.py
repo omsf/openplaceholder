@@ -1,6 +1,11 @@
 from unittest import TestCase
 
-from openplaceholder.impl.mappers import LOMAPMapper, LOMAPMapperConfig
+from openplaceholder.impl.mappers import (
+    KartografMapper,
+    KartografMapperConfig,
+    LOMAPMapper,
+    LOMAPMapperConfig,
+)
 
 
 class TestLOMAPMapper(TestCase):
@@ -8,3 +13,10 @@ class TestLOMAPMapper(TestCase):
     def test_init(self) -> None:
         config = LOMAPMapperConfig()
         LOMAPMapper(config)
+
+
+class TestKartographMapper(TestCase):
+
+    def test_init(self) -> None:
+        config = KartografMapperConfig()
+        KartografMapper(config)
