@@ -41,19 +41,25 @@ def load_json(path: str | Path) -> dict[str, Any]:
     return raw
 
 
-# TODO: this currently only supports TOML, but I suspect some people
-# will want JSON. This means we'll be limited to the datatypes
-# supported by JSON.
-def resolve_pipeline(path: str | Path) -> Pipeline:
-    raw = load_toml(path)
+def resolve_pipeline(data: dict[str, Any]) -> Pipeline:
+    """Construct a Pipeline instance from configuration data.
 
-    generator = _build_plugin(raw["generation"]["generator"])
+    Parameters
+    ----------
+    data
+        A dictionary of pipeline component definitions.
 
-    selection_table = raw["selection"]
+    Returns
+    -------
+    Pipeline
+    """
+    generator = _build_plugin(data["generation"]["generator"])
+
+    selection_table = data["selection"]
     validators = [_build_plugin(v) for v in selection_table.get("validators", [])]
     selector = _build_plugin(selection_table.get("selector"))
 
-    assembly = raw["assembly"]
+    assembly = data["assembly"]
     transformations = [_build_plugin(t) for t in assembly.get("transformations", [])]
     mapping_table = assembly["mapping"]
     mapping = _build_plugin(mapping_table)
