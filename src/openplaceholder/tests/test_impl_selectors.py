@@ -1,13 +1,12 @@
-from unittest import TestCase
-
 import numpy as np
+import pytest
 
 from openplaceholder.core.structure import StructureSet
 from openplaceholder.impl.selector.mpo import MPOSelector, MPOSelectorConfig
 from openplaceholder.tests.helpers import make_structures
 
 
-class TestMPOSelector(TestCase):
+class TestMPOSelector:
 
     def test_init(self) -> None:
         config = MPOSelectorConfig(objectives={})
@@ -16,7 +15,7 @@ class TestMPOSelector(TestCase):
     def test_select_raises_when_pool_too_large(self) -> None:
         selector = MPOSelector(MPOSelectorConfig(objectives={}))
         too_many = StructureSet.from_structures(make_structures(MPOSelector._MAX_POOL_SIZE_BATCHED + 1))
-        with self.assertRaises(NotImplementedError):
+        with pytest.raises(NotImplementedError):
             selector.select([too_many])
 
     def test_optimize_batched_picks_one_per_group_across_batches(self) -> None:
@@ -34,7 +33,7 @@ class TestMPOSelector(TestCase):
         groups = [[0, 1], [2, 3], [4, 5], [6, 7]]
         chosen = selector._optimize_batched(matrix, groups)
 
-        self.assertEqual(sorted(chosen), [0, 2, 4, 6])
+        assert sorted(chosen) == [0, 2, 4, 6]
 
     def test_optimize_picks_best_cross_group_pair(self) -> None:
         selector = MPOSelector(MPOSelectorConfig(objectives={}))
@@ -53,4 +52,4 @@ class TestMPOSelector(TestCase):
             ]
         )
         groups = [[0, 1], [2, 3]]
-        self.assertEqual(selector._optimize(matrix, groups), [0, 2])
+        assert selector._optimize(matrix, groups) == [0, 2]

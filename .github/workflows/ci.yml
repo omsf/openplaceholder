@@ -40,4 +40,4 @@ jobs:
           activate-environment: ${{ matrix.python-version }}
 
       - name: Test
-        run: python -m unittest discover -s openplaceholder.tests
+        run: pytest ./src/

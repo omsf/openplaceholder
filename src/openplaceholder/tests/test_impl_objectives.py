@@ -1,5 +1,6 @@
 import base64
-from unittest import TestCase
+
+import pytest
 
 from openplaceholder.core.structure import Structure
 from openplaceholder.impl.selector.objectives.ifp import (
@@ -30,17 +31,17 @@ def _tyk2_structure() -> Structure:
     )
 
 
-class TestVolumeOverlapObjective(TestCase):
+class TestVolumeOverlapObjective:
 
     def test_self_overlap_is_one(self) -> None:
         structure = _tyk2_structure()
         objective = VolumeOverlapObjective(VolumeOverlapObjectiveConfig())
-        self.assertAlmostEqual(objective.score(structure, structure), 1.0)
+        pytest.approx(objective.score(structure, structure), 1.0)
 
 
-class TestIFPSimilarityObjective(TestCase):
+class TestIFPSimilarityObjective:
 
     def test_self_similarity_is_one(self) -> None:
         structure = _tyk2_structure()
         objective = IFPSimilarityObjective(IFPSimilarityObjectiveConfig())
-        self.assertEqual(objective.score(structure, structure), 1.0)
+        pytest.approx(objective.score(structure, structure), 1.0)

@@ -1,9 +1,8 @@
 import base64
 import importlib.util
-import unittest
-from unittest import TestCase
 
 import numpy as np
+import pytest
 
 from openplaceholder.core.structure import Structure
 from openplaceholder.impl.transformations import (
@@ -55,15 +54,13 @@ def _tyk2_complex(name: str = "ejm55") -> Structure:
     )
 
 
-class TestLigandVolume(TestCase):
+class TestLigandVolume:
 
     def test_volume_grows_with_ligand_size(self) -> None:
-        self.assertGreater(
-            _ligand_volume(_ligand_structure(5.0, "large")), _ligand_volume(_ligand_structure(2.0, "small"))
-        )
+        assert _ligand_volume(_ligand_structure(5.0, "large")) > _ligand_volume(_ligand_structure(2.0, "small"))
 
 
-class TestMaxVolumeSiteSubstitutionTransformation(TestCase):
+class TestMaxVolumeSiteSubstitutionTransformation:
 
     def test_all_complexes_end_up_with_one_shared_protein(self) -> None:
         # two copies of the same complex, one with its coordinates shifted away:
@@ -84,13 +81,13 @@ class TestMaxVolumeSiteSubstitutionTransformation(TestCase):
             [canonical, shifted]
         )
 
-        self.assertEqual({s.ligand_name for s in result}, {"canonical", "shifted"})
+        assert {s.ligand_name for s in result} == {"canonical", "shifted"}
         proteins = [s.protein_atoms().positions for s in result]
-        self.assertEqual(proteins[0].shape, proteins[1].shape)
-        self.assertTrue(np.allclose(proteins[0], proteins[1], atol=1e-3))
+        assert proteins[0].shape == proteins[1].shape
+        assert np.allclose(proteins[0], proteins[1], atol=1e-3)
 
 
-class TestHeavyAtomAdditionTransformation(TestCase):
+class TestHeavyAtomAdditionTransformation:
 
     def test_fills_missing_heavy_atoms_without_adding_hydrogens(self) -> None:
         complex_ = _tyk2_complex()
@@ -100,12 +97,12 @@ class TestHeavyAtomAdditionTransformation(TestCase):
         protein = prepared.protein_atoms()
 
         # PDBFixer fills missing heavy atoms; adding hydrogens is ComplexProtonation's job, not this one's
-        self.assertGreater(len(protein.select_atoms("not element H")), raw_heavy)
-        self.assertEqual(len(protein.select_atoms("element H")), 0)
+        assert len(protein.select_atoms("not element H")) > raw_heavy
+        assert len(protein.select_atoms("element H")) == 0
 
 
-@unittest.skipUnless(_HAS_DIMORPHITE, "dimorphite_dl (ligand protonation) not installed")
-class TestComplexProtonationTransformation(TestCase):
+@pytest.mark.skipif(not _HAS_DIMORPHITE, reason="dimorphite_dl (ligand protonation) not installed")
+class TestComplexProtonationTransformation:
 
     def test_adds_hydrogens_to_both_protein_and_ligand(self) -> None:
         complex_ = _tyk2_complex()
@@ -115,5 +112,5 @@ class TestComplexProtonationTransformation(TestCase):
         )[0]
 
         universe = protonated.to_mda_universe()
-        self.assertGreater(len(universe.select_atoms("protein and element H")), 0)
-        self.assertGreater(len(universe.select_atoms("not protein and element H")), 0)
+        assert len(universe.select_atoms("protein and element H")) > 0
+        assert len(universe.select_atoms("not protein and element H")) > 0

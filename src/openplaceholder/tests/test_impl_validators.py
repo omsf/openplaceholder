@@ -1,5 +1,4 @@
 import base64
-from unittest import TestCase
 
 from openplaceholder.core.structure import Structure
 from openplaceholder.impl.validators import (
@@ -22,21 +21,21 @@ END
 """
 
 
-class TestStereoValidator(TestCase):
+class TestStereoValidator:
 
     def test_init(self) -> None:
         config = StereoValidatorConfig()
         StereoValidator(config)
 
 
-class TestClashValidator(TestCase):
+class TestClashValidator:
 
     def test_init(self) -> None:
         config = ClashValidatorConfig()
         ClashValidator(config)
 
 
-class TestPosebustersValidator(TestCase):
+class TestPosebustersValidator:
 
     def test_init(self) -> None:
         config = PosebustersValidatorConfig()
@@ -51,4 +50,4 @@ class TestPosebustersValidator(TestCase):
             structure_data=base64.b64encode(_UNPERCEIVABLE_LIGAND.encode()).decode(),
         )
         validator = PosebustersValidator(PosebustersValidatorConfig())
-        self.assertEqual(validator.validate_structures([structure]), [])
+        assert validator.validate_structures([structure]) == []

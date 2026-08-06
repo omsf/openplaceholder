@@ -1,12 +1,11 @@
 import tempfile
-from unittest import TestCase
 
 from openplaceholder.core.generation.generator import StructureGeneratorArtifact
 from openplaceholder.impl.generator.archiver import JSONArchiver, JSONArchiverConfig
 from openplaceholder.tests.helpers import make_structures
 
 
-class TestJSONArchiver(TestCase):
+class TestJSONArchiver:
 
     def test_roundtrip(self) -> None:
 

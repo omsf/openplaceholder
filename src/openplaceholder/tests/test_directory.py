@@ -1,5 +1,6 @@
 import tempfile
-from unittest import TestCase
+
+import pytest
 
 from openplaceholder.core.generation.generator import StructureGeneratorArtifact
 from openplaceholder.impl.generator.archiver import (
@@ -13,10 +14,10 @@ from openplaceholder.impl.generator.directory import (
 from openplaceholder.tests.helpers import make_structures
 
 
-class TestDirectoryGenerator(TestCase):
+class TestDirectoryGenerator:
 
     def test_invalid_directory(self) -> None:
-        with self.assertRaises(FileNotFoundError):
+        with pytest.raises(FileNotFoundError):
             DirectoryGenerator(DirectoryGeneratorConfig(path="not_a_directory/"))
 
     def test_round_trip(self) -> None:
