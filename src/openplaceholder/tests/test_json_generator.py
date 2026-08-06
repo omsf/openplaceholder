@@ -1,5 +1,6 @@
 import tempfile
-from unittest import TestCase
+
+import pytest
 
 from openplaceholder.core.generation.generator import StructureGeneratorArtifact
 from openplaceholder.impl.generator.archiver import (
@@ -13,10 +14,10 @@ from openplaceholder.impl.generator.json import (
 from openplaceholder.tests.helpers import make_structures
 
 
-class TestJSONGenerator(TestCase):
+class TestJSONGenerator:
 
     def test_invalid_path(self) -> None:
-        with self.assertRaises(FileNotFoundError):
+        with pytest.raises(FileNotFoundError):
             JSONGenerator(JSONGeneratorConfig(path="not_a_file.json"))
 
     def test_round_trip(self) -> None:

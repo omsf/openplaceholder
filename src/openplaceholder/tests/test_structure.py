@@ -1,9 +1,9 @@
 import base64
 import tempfile
 from pathlib import Path
-from unittest import TestCase, skip
 
 import MDAnalysis as mda
+import pytest
 from rdkit import Chem
 from rdkit.Chem.rdDistGeom import EmbedMolecule
 
@@ -41,7 +41,7 @@ def _hydrogenated_unl_structure(smiles: str, ligand_name: str) -> Structure:
     return Structure("SEQ", smiles, ligand_name, "pdb", block)
 
 
-class TestStructureFormat(TestCase):
+class TestStructureFormat:
 
     def test_from_suffix_mmcif(self) -> None:
         assert StructureFormat.from_suffix(".mmcif") is StructureFormat.MMCIF
@@ -59,18 +59,18 @@ class TestStructureFormat(TestCase):
         assert StructureFormat.from_suffix(".MMCIF") is StructureFormat.MMCIF
 
     def test_from_suffix_invalid(self) -> None:
-        with self.assertRaises(UnsupportedFormatError):
+        with pytest.raises(UnsupportedFormatError):
             StructureFormat.from_suffix(".ficmm")
 
 
-class TestStructure(TestCase):
+class TestStructure:
 
     def test_valid_format_normalized(self) -> None:
         s = Structure("SEQ", BENZENE_SMILES, "lig", "mmcif", "data")
         assert s.structure_format == "MMCIF"
 
     def test_invalid_format(self) -> None:
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             Structure("SEQ", BENZENE_SMILES, "lig", "ficmm", "data")
 
     def test_equality(self) -> None:
@@ -102,10 +102,6 @@ class TestStructure(TestCase):
         b = Structure("SEQ", BENZENE_SMILES, "lig", "mmcif", "different_data")
         assert a.key() != b.key()
 
-    @skip("")
-    def test_same_complex(self) -> None:
-        raise NotImplementedError
-
     def test_to_mda_universe(self) -> None:
         test_file = str(TYK2_LIG_PDB)
         content = base64.b64encode(read_gzip_file(test_file)).decode()
@@ -124,9 +120,9 @@ class TestStructure(TestCase):
 
         protein, ligand = s.protein_atoms(), s.ligand_atoms()
 
-        self.assertGreater(len(protein), len(ligand))
-        self.assertGreater(len(ligand), 0)
-        self.assertEqual(len(protein) + len(ligand), len(s.to_mda_universe().atoms))
+        assert len(protein) > len(ligand)
+        assert len(ligand) > 0
+        assert len(protein) + len(ligand) == len(s.to_mda_universe().atoms)
 
     def test_with_atoms_returns_pdb_copy_preserving_metadata(self) -> None:
         s = _tyk2_structure()
@@ -134,10 +130,10 @@ class TestStructure(TestCase):
 
         rebuilt = s.with_atoms(merged)
 
-        self.assertEqual(rebuilt.structure_format, StructureFormat.PDB)
-        self.assertEqual(rebuilt.sequence, s.sequence)
-        self.assertEqual(rebuilt.ligand_name, s.ligand_name)
-        self.assertEqual(len(rebuilt.to_mda_universe().atoms), len(merged))
+        assert rebuilt.structure_format == StructureFormat.PDB
+        assert rebuilt.sequence == s.sequence
+        assert rebuilt.ligand_name == s.ligand_name
+        assert len(rebuilt.to_mda_universe().atoms) == len(merged)
 
     def test_to_rdkit_ligand_mol_default_ignores_residue_name_and_hydrogens(self) -> None:
         # pipeline output names the ligand residue "UNL" (not ligand_name) and
@@ -148,24 +144,27 @@ class TestStructure(TestCase):
 
         mol = s.to_rdkit_ligand_mol()
 
-        self.assertEqual(Chem.MolToSmiles(Chem.RemoveHs(mol)), Chem.MolToSmiles(Chem.MolFromSmiles(smiles)))
+        assert Chem.MolToSmiles(Chem.RemoveHs(mol)) == Chem.MolToSmiles(Chem.MolFromSmiles(smiles))
 
 
-class TestStructureSet(TestCase):
+@pytest.fixture
+def structures() -> list[Structure]:
+    structures = make_structures(n_structures=25, ligand_name="benzene")
+    structures += make_structures(n_structures=25, ligand_name="phenol", ligand_smiles=PHENOL_SMILES)
+    return structures
 
-    def setUp(self) -> None:
-        self.structures = make_structures(n_structures=25, ligand_name="benzene")
-        self.structures += make_structures(n_structures=25, ligand_name="phenol", ligand_smiles=PHENOL_SMILES)
 
-    def test_from_structures(self) -> None:
-        ss_one_to_one = StructureSet.from_structures(self.structures)
-        assert len(ss_one_to_one) == len(self.structures)
+class TestStructureSet:
 
-        ss_doubled_input = StructureSet.from_structures(self.structures + self.structures)
-        assert len(ss_doubled_input) == len(self.structures)
+    def test_from_structures(self, structures: list[Structure]) -> None:
+        ss_one_to_one = StructureSet.from_structures(structures)
+        assert len(ss_one_to_one) == len(structures)
 
-    def test_write(self) -> None:
-        ss = StructureSet.from_structures(self.structures)
+        ss_doubled_input = StructureSet.from_structures(structures + structures)
+        assert len(ss_doubled_input) == len(structures)
+
+    def test_write(self, structures: list[Structure]) -> None:
+        ss = StructureSet.from_structures(structures)
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "structures.json"
             ss.write(path)
@@ -174,12 +173,12 @@ class TestStructureSet(TestCase):
             content = from_json(path.read_text())
             assert content.structures == ss.structures
 
-    def test_from_file(self) -> None:
-        ss = StructureSet.from_structures(self.structures)
+    def test_from_file(self, structures: list[Structure]) -> None:
+        ss = StructureSet.from_structures(structures)
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "structures.json"
             ss.write(path)
             loaded = StructureSet.from_file(path)
-            assert len(loaded) == len(self.structures)
+            assert len(loaded) == len(structures)
             loaded_deduped = StructureSet.from_structures(loaded.structures)
             assert len(loaded_deduped) == len(loaded)

@@ -1,6 +1,5 @@
 import tempfile
 from pathlib import Path
-from unittest import TestCase
 
 from openplaceholder.core.resolver import resolve_pipeline
 from openplaceholder.impl.generator.openfold3 import (
@@ -51,7 +50,7 @@ implementation = "openplaceholder.impl.mappers:LOMAPMapper"
 """
 
 
-class TestResolvePipeline(TestCase):
+class TestResolvePipeline:
 
     def test_resolve_pipeline_from_toml(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -63,21 +62,21 @@ class TestResolvePipeline(TestCase):
             generator = pipeline.generator
             assert isinstance(generator, OpenFold3Generator)
             assert isinstance(generator._config, OpenFold3GeneratorConfig)
-            self.assertEqual(generator._config.sequence, "MGS")
-            self.assertEqual(generator._config.ligands, {"lig_a": "C1=CC=CC=C1"})
+            assert generator._config.sequence == "MGS"
+            assert generator._config.ligands == {"lig_a": "C1=CC=CC=C1"}
 
-            self.assertEqual(len(pipeline.validators), 1)
-            self.assertIsInstance(pipeline.validators[0], PosebustersValidator)
+            assert len(pipeline.validators) == 1
+            assert isinstance(pipeline.validators[0], PosebustersValidator)
 
             selector = pipeline.selector
             assert isinstance(selector, MPOSelector)
-            self.assertIn("VolumeOverlapObjective", selector._config.objectives)
+            assert "VolumeOverlapObjective" in selector._config.objectives
 
-            self.assertIsInstance(pipeline.transformations, list)
-            self.assertEqual(len(pipeline.transformations), 3)
-            self.assertIsInstance(pipeline.transformations[0], MaxVolumeSiteSubstitutionTransformation)
-            self.assertIsInstance(pipeline.transformations[1], HeavyAtomAdditionTransformation)
+            assert isinstance(pipeline.transformations, list)
+            assert len(pipeline.transformations) == 3
+            assert isinstance(pipeline.transformations[0], MaxVolumeSiteSubstitutionTransformation)
+            assert isinstance(pipeline.transformations[1], HeavyAtomAdditionTransformation)
             protonation = pipeline.transformations[2]
             assert isinstance(protonation, ComplexProtonationTransformation)
-            self.assertEqual(protonation._config.ph, 7.0)
-            self.assertIsInstance(pipeline.mapping, LOMAPMapper)
+            assert protonation._config.ph == 7.0
+            assert isinstance(pipeline.mapping, LOMAPMapper)

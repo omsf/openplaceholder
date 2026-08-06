@@ -1,5 +1,4 @@
 import tempfile
-from unittest import TestCase
 
 from openplaceholder.impl.generator.directory import (
     DirectoryGenerator,
@@ -15,7 +14,7 @@ from openplaceholder.impl.generator.openfold3 import (
 )
 
 
-class TestOpenFold3Generator(TestCase):
+class TestOpenFold3Generator:
 
     def test_init(self) -> None:
 
@@ -30,7 +29,7 @@ class TestOpenFold3Generator(TestCase):
             OpenFold3Generator(config)
 
 
-class TestDirectoryGenerator(TestCase):
+class TestDirectoryGenerator:
 
     def test_init(self) -> None:
 
@@ -39,7 +38,7 @@ class TestDirectoryGenerator(TestCase):
             DirectoryGenerator(config)
 
 
-class TestJSONGenerator(TestCase):
+class TestJSONGenerator:
 
     def test_init(self) -> None:
 

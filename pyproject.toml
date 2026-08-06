@@ -36,6 +36,7 @@ test = [
     "black",
     "isort",
     "mypy",
+    "pytest",
 ]
 dev = [
     "openplaceholder[test]",

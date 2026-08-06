@@ -1,9 +1,7 @@
-import unittest
-
 from openplaceholder.impl.validators import StereoValidator, StereoValidatorConfig
 
 
-class TestStereoValidator(unittest.TestCase):
+class TestStereoValidator:
 
     def test_config_defaults(self) -> None:
         config = StereoValidatorConfig()
