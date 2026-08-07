@@ -27,8 +27,8 @@ class OpenFold3GeneratorConfig(StructureGeneratorConfigBase):
     sequence: str
     ligands: dict[str, str]
     n_diffusion_samples: int
-    generate_n_seeds: int | None
     generator_directory: str | Path
+    generate_n_seeds: int | None = None
     run_openfold_path: str | Path | None = None
     seeds: list[int] | None = None
     clean_up: bool = True
