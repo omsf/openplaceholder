@@ -27,7 +27,7 @@ def cli() -> None:
     """OpenPlaceHolder: co-folding to alchemical inputs."""
 
 
-@cli.command(short_help="Run the pipeline up to a stage.")
+@cli.command(short_help="Run the pipeline fully or partially.")
 @click.option(
     "-c",
     "--config",
@@ -44,17 +44,11 @@ def cli() -> None:
 @click.option(
     "-b", "--begin", required=False, type=click.Choice([*map(lambda m: str(m).lower(), Stage.__members__.keys())])
 )
+@click.option("-i", "--input", required=False, type=click.Path(dir_okay=False, path_type=Path))
 @click.option(
     "-e", "--end", required=False, type=click.Choice([*map(lambda m: str(m).lower(), Stage.__members__.keys())])
 )
-@click.option(
-    "-o",
-    "--output",
-    default="network.json",
-    show_default=True,
-    type=click.Path(dir_okay=False, path_type=Path),
-    help="Where to write the AlchemicalNetwork, if the mapper runs.",
-)
+@click.option("-o", "--output", required=False, type=click.Path(dir_okay=False, path_type=Path))
 @click.option("-v", "--verbose", is_flag=True, help="Emit debug logging.")
 def run(config: Path, begin: str, end: str, stage: str, output: Path, verbose: bool) -> None:
     """Run the pipeline up to and including STAGE.
