@@ -1,6 +1,7 @@
 """Command line interface for openplaceholder."""
 
 import logging
+from enum import IntEnum, auto
 from pathlib import Path
 from typing import Any
 
@@ -8,53 +9,17 @@ import click
 from gufe import AlchemicalNetwork
 
 from openplaceholder.core.diagnostics import alchemicalnetwork_to_ligands_sdf
-from openplaceholder.core.pipeline import Pipeline
-from openplaceholder.core.resolver import resolve_pipeline
-from openplaceholder.core.structure import StructureSet
+from openplaceholder.core.resolver import _build_plugin, load_toml
 
 logger = logging.getLogger(__name__)
 
-# in pipeline order; running one stage runs every stage up to and including it
-STAGES = ["generator", "validator", "selector", "transformer", "mapper"]
 
-
-def _run_until(pipeline: Pipeline, stage: str) -> AlchemicalNetwork | None:
-    """Run the pipeline, stopping once ``stage`` is done.
-
-    Returns the network if the mapper ran, otherwise ``None``.
-    """
-    artifacts = pipeline.generator.run()
-    click.echo(f"generated {len(artifacts)} artifacts")
-    if stage == "generator":
-        return None
-
-    structure_sets = []
-    for artifact in artifacts:
-        structures = artifact.structures
-        for validator in pipeline.validators:
-            structures = validator.validate_structures(structures)
-        if not structures:
-            logger.warning("no structures for ligand %s passed validation, dropping", artifact.ligand_name)
-            continue
-        structure_sets.append(StructureSet.from_structures(structures))
-    click.echo(f"validated {len(structure_sets)} structure sets")
-    if stage == "validator":
-        return None
-
-    # select optimizes jointly across all ligands' candidate sets, so it is
-    # called once on the full collection rather than per-ligand
-    structures = pipeline.selector.select(structure_sets)
-    click.echo(f"selected {len(structures)} structures")
-    if stage == "selector":
-        return None
-
-    for transformation in pipeline.transformations:
-        structures = transformation.transform(structures)
-    click.echo(f"transformed {len(structures)} structures")
-    if stage == "transformer":
-        return None
-
-    return pipeline.mapping.map(structures)
+class Stage(IntEnum):
+    GENERATOR = auto()
+    VALIDATOR = auto()
+    SELECTOR = auto()
+    TRANSFORMATION = auto()
+    MAPPER = auto()
 
 
 @click.group()
@@ -63,15 +28,24 @@ def cli() -> None:
 
 
 @cli.command(short_help="Run the pipeline up to a stage.")
-# the generated {a|b|c} metavar is long enough that click breaks the usage line
-# mid-word, so name it and list the choices in the help text instead
-@click.argument("stage", metavar="STAGE", type=click.Choice([*STAGES, "all"]))
 @click.option(
     "-c",
     "--config",
     required=True,
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
     help="Pipeline configuration TOML.",
+)
+@click.option(
+    "-s",
+    "--stage",
+    required=False,
+    type=click.Choice(["all", *map(lambda m: str(m).lower(), Stage.__members__.keys())]),
+)
+@click.option(
+    "-b", "--begin", required=False, type=click.Choice([*map(lambda m: str(m).lower(), Stage.__members__.keys())])
+)
+@click.option(
+    "-e", "--end", required=False, type=click.Choice([*map(lambda m: str(m).lower(), Stage.__members__.keys())])
 )
 @click.option(
     "-o",
@@ -82,7 +56,7 @@ def cli() -> None:
     help="Where to write the AlchemicalNetwork, if the mapper runs.",
 )
 @click.option("-v", "--verbose", is_flag=True, help="Emit debug logging.")
-def run(stage: str, config: Path, output: Path, verbose: bool) -> None:
+def run(config: Path, begin: str, end: str, stage: str, output: Path, verbose: bool) -> None:
     """Run the pipeline up to and including STAGE.
 
     STAGE is one of: generator, validator, selector, transformer, mapper, or
@@ -90,12 +64,46 @@ def run(stage: str, config: Path, output: Path, verbose: bool) -> None:
     """
     logging.basicConfig(level=logging.DEBUG if verbose else logging.INFO)
 
-    pipeline = resolve_pipeline(config)
-    network = _run_until(pipeline, "mapper" if stage == "all" else stage)
+    match (begin, end, stage):
+        case None, None, s:
+            if s.lower() == "all":
+                first = Stage.GENERATOR
+                last = Stage.MAPPER
+            else:
+                first = last = Stage.__members__[s.upper()]
+        case None, None, "all":
+            first = Stage.GENERATOR
+            last = Stage.MAPPER
+        case b, None, None:
+            first = Stage.__members__[b.upper()]
+            last = Stage.MAPPER
+        case None, e, None:
+            first = Stage.GENERATOR
+            last = Stage.__members__[e.upper()]
+        case b, e, None:
+            first = Stage.__members__[b.upper()]
+            last = Stage.__members__[e.upper()]
+            if first > last:
+                raise ValueError(f"'{b.lower()}' is performed after '{e.lower()}'")
+        case _:
+            raise ValueError("Must supply a beginning and end, only beginning, only end, or a specific stage.")
 
-    if network is not None:
-        click.echo(f"writing {output}")
-        network.to_json(output)
+    config_map = load_toml(config)
+
+    plugins = []
+    for i in range(first, last + 1):
+        match i:
+            case 1:
+                stage_plugins = [_build_plugin(config_map["generation"]["generator"])]
+            case 2:
+                stage_plugins = [_build_plugin(val) for val in config_map["selection"]["validators"]]
+            case 3:
+                stage_plugins = [_build_plugin(config_map["selection"]["selector"])]
+            case 4:
+                stage_plugins = [_build_plugin(trans) for trans in config_map["assembly"]["transformations"]]
+            case 5:
+                stage_plugins = [_build_plugin(config_map["assembly"]["mapping"])]
+        plugins.extend(stage_plugins)
 
 
 @cli.group()
