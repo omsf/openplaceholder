@@ -1,7 +1,7 @@
 import tempfile
 from pathlib import Path
 
-from openplaceholder.core.resolver import resolve_pipeline
+from openplaceholder.core.resolver import load_toml, resolve_pipeline
 from openplaceholder.impl.generator.openfold3 import (
     OpenFold3Generator,
     OpenFold3GeneratorConfig,
@@ -57,7 +57,7 @@ class TestResolvePipeline:
             config_path = Path(tmpdir) / "config.toml"
             config_path.write_text(CONFIG_TEMPLATE.format(generator_directory=tmpdir))
 
-            pipeline = resolve_pipeline(config_path)
+            pipeline = resolve_pipeline(load_toml(config_path))
 
             generator = pipeline.generator
             assert isinstance(generator, OpenFold3Generator)
