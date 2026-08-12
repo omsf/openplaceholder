@@ -42,10 +42,7 @@ def atoms_to_pdb_string(atoms: mda.AtomGroup) -> str:
             writer.write(atoms)
             # grab value before the writer closes the buffer
             s = buffer.getvalue()
-        # TODO: current mmcif parser might include incorrect null
-        # bytes. Once this is fixed, we can remove this conversion
-        # replacement
-        return s.replace("\x00", " ")
+        return s
 
 
 def _attach_hydrogens(mol: Chem.Mol, heavy: mda.AtomGroup, hydrogens: mda.AtomGroup) -> Chem.Mol:
@@ -94,7 +91,6 @@ class LigandPerceptionError(Exception):
 
 
 class StructureFormat(StrEnum):
-    MMCIF = "MMCIF"
     PDB = "PDB"
 
     @staticmethod
@@ -126,8 +122,6 @@ class StructureFormat(StrEnum):
         UnsupportedFormatError
         """
         match suffix.lower():
-            case ".mmcif" | ".cif":
-                return cls.MMCIF
             case ".pdb":
                 return cls.PDB
             case _:
@@ -181,9 +175,6 @@ class Structure(JSONSerializable):
             case StructureFormat.PDB:
                 stream = io.StringIO(self.decode_structure_data().decode())
                 topology_format = "pdb"
-            case StructureFormat.MMCIF:
-                stream = io.StringIO(self.decode_structure_data().decode())
-                topology_format = "mmcif"
             case _:
                 raise UnsupportedFormatError(
                     f"{self.structure_format} is not supported by MDAnalysis ({mda.__version__})."

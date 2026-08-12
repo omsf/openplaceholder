@@ -17,8 +17,6 @@ from openplaceholder.impl.transformations import (
 from openplaceholder.tests.datafiles import TYK2_LIG_PDB
 from openplaceholder.tests.helpers import read_gzip_file
 
-# ligand protonation (dimorphite_dl) is absent from the mmcif-pr local env; CI
-# (py312/py313/py314) has it, so the full-stack test runs there and skips locally
 _HAS_DIMORPHITE = importlib.util.find_spec("dimorphite_dl") is not None
 _EJM55_SMILES = "COC(=O)Nc1cc(NC(=O)c2c(Cl)cccc2Cl)ccn1"
 

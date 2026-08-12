@@ -18,7 +18,7 @@ def generate_fake_run_output(gen_dir: Path, n_seeds: int, n_diffusion_samples: i
         for seed_num in padded_range(n_seeds):  # type: ignore
             seed = f"seed_{seed_num}"
             for pose_num in padded_range(n_diffusion_samples):  # type: ignore
-                basename = f"pose_{pose_num}.cif"
+                basename = f"pose_{pose_num}.pdb"
                 output_dir = gen_dir / "output" / lig / seed
                 output_dir.mkdir(exist_ok=True, parents=True)
                 file_path = output_dir / basename

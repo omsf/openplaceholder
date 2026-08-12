@@ -43,20 +43,14 @@ def _hydrogenated_unl_structure(smiles: str, ligand_name: str) -> Structure:
 
 class TestStructureFormat:
 
-    def test_from_suffix_mmcif(self) -> None:
-        assert StructureFormat.from_suffix(".mmcif") is StructureFormat.MMCIF
-
     def test_from_suffix_pdb(self) -> None:
         assert StructureFormat.from_suffix(".pdb") is StructureFormat.PDB
 
     def test_to_suffix_pdb(self) -> None:
         assert StructureFormat.PDB.to_suffix() == ".pdb"
 
-    def test_to_suffix_mmcif(self) -> None:
-        assert StructureFormat.MMCIF.to_suffix() == ".mmcif"
-
     def test_from_suffix_case_insensitive(self) -> None:
-        assert StructureFormat.from_suffix(".MMCIF") is StructureFormat.MMCIF
+        assert StructureFormat.from_suffix(".pDb") is StructureFormat.PDB
 
     def test_from_suffix_invalid(self) -> None:
         with pytest.raises(UnsupportedFormatError):
@@ -66,40 +60,38 @@ class TestStructureFormat:
 class TestStructure:
 
     def test_valid_format_normalized(self) -> None:
-        s = Structure("SEQ", BENZENE_SMILES, "lig", "mmcif", "data")
-        assert s.structure_format == "MMCIF"
+        s = Structure("SEQ", BENZENE_SMILES, "lig", "pdb", "data")
+        assert s.structure_format == StructureFormat.PDB
 
     def test_invalid_format(self) -> None:
         with pytest.raises(ValueError):
-            Structure("SEQ", BENZENE_SMILES, "lig", "ficmm", "data")
+            Structure("SEQ", BENZENE_SMILES, "lig", "bdp", "data")
 
     def test_equality(self) -> None:
-        a = Structure("SEQ", BENZENE_SMILES, "lig", "mmcif", "data")
-        b = Structure("SEQ", BENZENE_SMILES, "lig", "mmcif", "data")
-        c = Structure("OTHER", BENZENE_SMILES, "lig", "mmcif", "data")
-        d = Structure("OTHER", BENZENE_SMILES, "lig", "pdb", "data")
+        a = Structure("SEQ", BENZENE_SMILES, "lig", "pdb", "data")
+        b = Structure("SEQ", BENZENE_SMILES, "lig", "pdb", "data")
+        c = Structure("OTHER", BENZENE_SMILES, "lig", "pdb", "data")
         assert a == b
         assert b != c
-        assert c != d
 
     def test_hashable(self) -> None:
-        hash(Structure("SEQ", BENZENE_SMILES, "lig", "mmcif", "data"))
+        hash(Structure("SEQ", BENZENE_SMILES, "lig", "pdb", "data"))
 
     def test_structure_roundtrip(self) -> None:
         data = b"fake data"
         encoded = base64.b64encode(data).decode()
-        s = Structure("SEQ", BENZENE_SMILES, "lig", "mmcif", encoded)
+        s = Structure("SEQ", BENZENE_SMILES, "lig", "pdb", encoded)
         decoded = s.decode_structure_data()
         assert decoded == data, (data, decoded)
 
     def test_key_equal_structures(self) -> None:
-        a = Structure("SEQ", BENZENE_SMILES, "lig", "mmcif", "data")
-        b = Structure("SEQ", BENZENE_SMILES, "lig", "mmcif", "data")
+        a = Structure("SEQ", BENZENE_SMILES, "lig", "pdb", "data")
+        b = Structure("SEQ", BENZENE_SMILES, "lig", "pdb", "data")
         assert a.key() == b.key()
 
     def test_key_different_structures(self) -> None:
-        a = Structure("SEQ", BENZENE_SMILES, "lig", "mmcif", "data")
-        b = Structure("SEQ", BENZENE_SMILES, "lig", "mmcif", "different_data")
+        a = Structure("SEQ", BENZENE_SMILES, "lig", "pdb", "data")
+        b = Structure("SEQ", BENZENE_SMILES, "lig", "pdb", "different_data")
         assert a.key() != b.key()
 
     def test_to_mda_universe(self) -> None:

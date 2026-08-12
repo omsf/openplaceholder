@@ -217,8 +217,6 @@ experiment_settings:
                     continue
 
                 raw = output_file.read_bytes()
-                if structure_format == StructureFormat.MMCIF:
-                    raw = self._rename_ligand_residue(raw, query_name)
 
                 structure_params = dict(
                     sequence=self._config.sequence,
