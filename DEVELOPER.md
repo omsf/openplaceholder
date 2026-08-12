@@ -11,10 +11,10 @@ Users of openplaceholder should not be concerned with this, as they should insta
 
 ## Running tests
 
-Tests are implemented with the standard library `unittest` module.
+Tests are implemented with the `pytest` package.
 
 ```
-pixi run -e dev python -m unittest discover -s openplaceholder.tests
+pixi run -e dev pytest src/
 ```
 
 ## Code quality checks
