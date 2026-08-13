@@ -11,8 +11,6 @@ from gufe import AlchemicalNetwork
 from openplaceholder.core.diagnostics import alchemicalnetwork_to_ligands_sdf
 from openplaceholder.core.resolver import _build_plugin, load_toml
 
-logger = logging.getLogger(__name__)
-
 
 class Stage(IntEnum):
     GENERATOR = auto()
@@ -45,7 +43,7 @@ def cli() -> None:
 @click.option("-o", "--output", required=False, type=click.Path(dir_okay=False, path_type=Path))
 @click.option("-v", "--verbose", is_flag=True, help="Emit debug logging.")
 def run(config: Path, begin: str, end: str, output: Path, verbose: bool) -> None:
-    """Run the pipeline up to and including STAGE.
+    """Run the pipeline through a beginning and end state.
 
     A beginning or end stage is one of: generator, validator, selector, transformation, or mapper.
     """
@@ -68,19 +66,32 @@ def run(config: Path, begin: str, end: str, output: Path, verbose: bool) -> None
 
     config_map = load_toml(config)
 
+    def _resolve(path_parts):
+        node = config_map
+        for key in path_parts:
+            if not isinstance(node, dict) or key not in node:
+                raise ValueError(f"Missing required config key: {'.'.join(path_parts)}")
+            node = node[key]
+        return node
+
+    config_plugin_map: dict[Stage, tuple[tuple[str, ...], bool]] = {
+        Stage.GENERATOR: (("generation", "generator"), False),
+        Stage.VALIDATOR: (("selection", "validators"), True),
+        Stage.SELECTOR: (("selection", "selector"), False),
+        Stage.TRANSFORMATION: (("assembly", "transformations"), True),
+        Stage.MAPPER: (("assembly", "mapping"), False),
+    }
+
     plugins = []
     for i in range(first, last + 1):
-        match i:
-            case Stage.GENERATOR:
-                stage_plugins = [_build_plugin(config_map["generation"]["generator"])]
-            case Stage.VALIDATOR:
-                stage_plugins = [_build_plugin(val) for val in config_map["selection"]["validators"]]
-            case Stage.SELECTOR:
-                stage_plugins = [_build_plugin(config_map["selection"]["selector"])]
-            case Stage.TRANSFORMATION:
-                stage_plugins = [_build_plugin(trans) for trans in config_map["assembly"]["transformations"]]
-            case Stage.MAPPER:
-                stage_plugins = [_build_plugin(config_map["assembly"]["mapping"])]
+        path, expect_list = config_plugin_map[Stage(i)]
+        node = _resolve(path)
+        if expect_list:
+            if not isinstance(node, list):
+                raise ValueError(f"'config['{':'.join(path)}'] must be a TOML array of tables")
+            stage_plugins = [_build_plugin(val) for val in node]
+        else:
+            stage_plugins = [_build_plugin(node)]
         plugins.extend(stage_plugins)
 
 
