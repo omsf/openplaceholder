@@ -87,15 +87,15 @@ def run(config: Path, begin: str, end: str, stage: str, output: Path, verbose: b
     plugins = []
     for i in range(first, last + 1):
         match i:
-            case 1:
+            case Stage.GENERATOR:
                 stage_plugins = [_build_plugin(config_map["generation"]["generator"])]
-            case 2:
+            case Stage.VALIDATOR:
                 stage_plugins = [_build_plugin(val) for val in config_map["selection"]["validators"]]
-            case 3:
+            case Stage.SELECTOR:
                 stage_plugins = [_build_plugin(config_map["selection"]["selector"])]
-            case 4:
+            case Stage.TRANSFORMATION:
                 stage_plugins = [_build_plugin(trans) for trans in config_map["assembly"]["transformations"]]
-            case 5:
+            case Stage.MAPPER:
                 stage_plugins = [_build_plugin(config_map["assembly"]["mapping"])]
         plugins.extend(stage_plugins)
 
