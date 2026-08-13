@@ -36,12 +36,6 @@ def cli() -> None:
     help="Pipeline configuration TOML.",
 )
 @click.option(
-    "-s",
-    "--stage",
-    required=False,
-    type=click.Choice(["all", *map(lambda m: str(m).lower(), Stage.__members__.keys())]),
-)
-@click.option(
     "-b", "--begin", required=False, type=click.Choice([*map(lambda m: str(m).lower(), Stage.__members__.keys())])
 )
 @click.option("-i", "--input", required=False, type=click.Path(dir_okay=False, path_type=Path))
@@ -50,37 +44,27 @@ def cli() -> None:
 )
 @click.option("-o", "--output", required=False, type=click.Path(dir_okay=False, path_type=Path))
 @click.option("-v", "--verbose", is_flag=True, help="Emit debug logging.")
-def run(config: Path, begin: str, end: str, stage: str, output: Path, verbose: bool) -> None:
+def run(config: Path, begin: str, end: str, output: Path, verbose: bool) -> None:
     """Run the pipeline up to and including STAGE.
 
-    STAGE is one of: generator, validator, selector, transformer, mapper, or
-    'all' to run the pipeline end to end.
+    A beginning or end stage is one of: generator, validator, selector, transformation, or mapper.
     """
     logging.basicConfig(level=logging.DEBUG if verbose else logging.INFO)
 
-    match (begin, end, stage):
-        case None, None, s:
-            if s.lower() == "all":
-                first = Stage.GENERATOR
-                last = Stage.MAPPER
-            else:
-                first = last = Stage.__members__[s.upper()]
-        case None, None, "all":
-            first = Stage.GENERATOR
-            last = Stage.MAPPER
-        case b, None, None:
+    match (begin, end):
+        case None, None:
+            raise ValueError("At least one of --begin or --end is required.")
+        case b, None:
             first = Stage.__members__[b.upper()]
             last = Stage.MAPPER
-        case None, e, None:
+        case None, e:
             first = Stage.GENERATOR
             last = Stage.__members__[e.upper()]
-        case b, e, None:
+        case b, e:
             first = Stage.__members__[b.upper()]
             last = Stage.__members__[e.upper()]
             if first > last:
                 raise ValueError(f"'{b.lower()}' is performed after '{e.lower()}'")
-        case _:
-            raise ValueError("Must supply a beginning and end, only beginning, only end, or a specific stage.")
 
     config_map = load_toml(config)
 
