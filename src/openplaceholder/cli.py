@@ -1,15 +1,27 @@
 """Command line interface for openplaceholder."""
 
+import json
 import logging
 from enum import IntEnum, auto
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import click
 from gufe import AlchemicalNetwork
+from gufe.tokenization import GufeTokenizable
 
 from openplaceholder.core.diagnostics import alchemicalnetwork_to_ligands_sdf
+from openplaceholder.core.generation.generator import (
+    StructureGeneratorArtifact,
+)
 from openplaceholder.core.resolver import _build_plugin, load_toml
+from openplaceholder.core.selection.validator import Validator
+from openplaceholder.core.serialization import (
+    JSONSerializable,
+    OPHEncoder,
+    from_json,
+)
+from openplaceholder.core.structure import StructureSet
 
 
 class Stage(IntEnum):
@@ -42,7 +54,7 @@ def cli() -> None:
 )
 @click.option("-o", "--output", required=False, type=click.Path(dir_okay=False, path_type=Path))
 @click.option("-v", "--verbose", is_flag=True, help="Emit debug logging.")
-def run(config: Path, begin: str, end: str, output: Path, verbose: bool) -> None:
+def run(config: Path, begin: str, end: str, input: Path, output: Path, verbose: bool) -> None:
     """Run the pipeline through a beginning and end state.
 
     A beginning or end stage is one of: generator, validator, selector, transformation, or mapper.
@@ -66,7 +78,7 @@ def run(config: Path, begin: str, end: str, output: Path, verbose: bool) -> None
 
     config_map = load_toml(config)
 
-    def _resolve(path_parts):
+    def _resolve(path_parts: tuple[str, ...]) -> dict[str, str]:
         node = config_map
         for key in path_parts:
             if not isinstance(node, dict) or key not in node:
@@ -89,10 +101,35 @@ def run(config: Path, begin: str, end: str, output: Path, verbose: bool) -> None
         if expect_list:
             if not isinstance(node, list):
                 raise ValueError(f"'config['{':'.join(path)}'] must be a TOML array of tables")
-            stage_plugins = [_build_plugin(val) for val in node]
+            stage_plugins = [(Stage(i), _build_plugin(val)) for val in node]
         else:
-            stage_plugins = [_build_plugin(node)]
+            stage_plugins = [(Stage(i), _build_plugin(node))]
         plugins.extend(stage_plugins)
+
+    def _apply_validator(data: list[StructureGeneratorArtifact], validator: Validator) -> list[StructureSet]:
+        new = []
+        for artifact in data:
+            validated_structures = validator.validate_structures(artifact.structures)
+            new.append(StructureSet.from_structures(validated_structures))
+        return new
+
+    data = from_json(input.read_text())
+    for stage_type, plugin in plugins:
+        data = {
+            Stage.GENERATOR: lambda: plugin.run(),
+            Stage.VALIDATOR: lambda: _apply_validator(cast(list[StructureGeneratorArtifact], data), plugin),
+            Stage.SELECTOR: lambda: plugin.select(data),
+            Stage.TRANSFORMATION: lambda: plugin.transform(data),
+            Stage.MAPPER: lambda: plugin.map(data),
+        }[
+            stage_type
+        ]()  # type: ignore
+
+    match data:
+        case GufeTokenizable():
+            output.write_text(cast(str, data.to_json()))
+        case JSONSerializable():
+            output.write_text(json.dumps(data, cls=OPHEncoder))
 
 
 @cli.group()
