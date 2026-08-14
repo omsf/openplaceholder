@@ -48,13 +48,13 @@ def cli() -> None:
 @click.option(
     "-b", "--begin", required=False, type=click.Choice([*map(lambda m: str(m).lower(), Stage.__members__.keys())])
 )
-@click.option("-i", "--input", required=False, type=click.Path(dir_okay=False, path_type=Path))
+@click.option("-i", "--input", required=False, type=click.Path(dir_okay=False, path_type=Path), default=None)
 @click.option(
     "-e", "--end", required=False, type=click.Choice([*map(lambda m: str(m).lower(), Stage.__members__.keys())])
 )
-@click.option("-o", "--output", required=False, type=click.Path(dir_okay=False, path_type=Path))
+@click.option("-o", "--output", required=True, type=click.Path(dir_okay=False, path_type=Path))
 @click.option("-v", "--verbose", is_flag=True, help="Emit debug logging.")
-def run(config: Path, begin: str, end: str, input: Path, output: Path, verbose: bool) -> None:
+def run(config: Path, begin: str | None, end: str | None, input: Path| None, output: Path, verbose: bool) -> None:
     """Run the pipeline through a beginning and end state.
 
     A beginning or end stage is one of: generator, validator, selector, transformation, or mapper.
@@ -76,9 +76,12 @@ def run(config: Path, begin: str, end: str, input: Path, output: Path, verbose: 
             if first > last:
                 raise ValueError(f"'{b.lower()}' is performed after '{e.lower()}'")
 
+    if first is Stage.GENERATOR and input is not None:
+        raise ValueError("If the beginning stage is a generator, no input should be provided.")
+
     config_map = load_toml(config)
 
-    def _resolve(path_parts: tuple[str, ...]) -> dict[str, str]:
+    def _resolve(path_parts: tuple[str, ...]) -> Any:
         node = config_map
         for key in path_parts:
             if not isinstance(node, dict) or key not in node:
@@ -113,24 +116,30 @@ def run(config: Path, begin: str, end: str, input: Path, output: Path, verbose: 
             new.append(StructureSet.from_structures(validated_structures))
         return new
 
-    data = from_json(input.read_text())
+
+    if input is not None:
+        data = from_json(input.read_text())
+    else:
+        data = None
+
     for stage_type, plugin in plugins:
-        data = {
-            Stage.GENERATOR: lambda: plugin.run(),
-            Stage.VALIDATOR: lambda: _apply_validator(cast(list[StructureGeneratorArtifact], data), plugin),
-            Stage.SELECTOR: lambda: plugin.select(data),
-            Stage.TRANSFORMATION: lambda: plugin.transform(data),
-            Stage.MAPPER: lambda: plugin.map(data),
-        }[
-            stage_type
-        ]()  # type: ignore
+        match stage_type:
+            case Stage.GENERATOR:
+                data = plugin.run()
+            case Stage.VALIDATOR:
+                data = _apply_validator(cast(list[StructureGeneratorArtifact], data), plugin)
+            case Stage.SELECTOR:
+                data = plugin.select(data)
+            case Stage.TRANSFORMATION:
+                data = plugin.transform(data)
+            case Stage.MAPPER:
+                data = plugin.map(data)
 
     match data:
         case GufeTokenizable():
             output.write_text(cast(str, data.to_json()))
-        case JSONSerializable():
+        case _:
             output.write_text(json.dumps(data, cls=OPHEncoder))
-
 
 @cli.group()
 def diagnostics() -> None:
