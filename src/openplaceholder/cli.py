@@ -98,16 +98,16 @@ def run(config: Path, begin: str | None, end: str | None, input: Path | None, ou
     """
     logging.basicConfig(level=logging.DEBUG if verbose else logging.INFO)
 
-    match (begin, end):
+    match begin, end:
         case None, None:
             raise ValueError("At least one of --begin or --end is required.")
-        case b, None:
+        case str() as b, None:
             first = Stage.__members__[b.upper()]
             last = Stage.MAPPER
-        case None, e:
+        case None, str() as e:
             first = Stage.GENERATOR
             last = Stage.__members__[e.upper()]
-        case b, e:
+        case str() as b, str() as e:
             first = Stage.__members__[b.upper()]
             last = Stage.__members__[e.upper()]
             if first > last:
