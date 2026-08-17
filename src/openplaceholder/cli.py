@@ -31,6 +31,9 @@ class Stage(IntEnum):
     MAPPER = auto()
 
 
+STAGE_CHOICES = tuple(name.lower() for name in Stage.__members__)
+
+
 @click.group()
 def cli() -> None:
     """OpenPlaceHolder: co-folding to alchemical inputs."""
@@ -45,18 +48,53 @@ def cli() -> None:
     help="Pipeline configuration TOML.",
 )
 @click.option(
-    "-b", "--begin", required=False, type=click.Choice([*map(lambda m: str(m).lower(), Stage.__members__.keys())])
+    "-b",
+    "--begin",
+    required=False,
+    type=click.Choice(STAGE_CHOICES),
+    help="First stage in the pipeline.",
 )
-@click.option("-i", "--input", required=False, type=click.Path(dir_okay=False, path_type=Path), default=None)
 @click.option(
-    "-e", "--end", required=False, type=click.Choice([*map(lambda m: str(m).lower(), Stage.__members__.keys())])
+    "-i",
+    "--input",
+    required=False,
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Input JSON file for resuming the pipeline from a prior stage.",
 )
-@click.option("-o", "--output", required=True, type=click.Path(dir_okay=False, path_type=Path))
+@click.option(
+    "-e",
+    "--end",
+    required=False,
+    type=click.Choice(STAGE_CHOICES),
+    help="Last stage in the pipeline.",
+)
+@click.option(
+    "-o",
+    "--output",
+    required=True,
+    type=click.Path(dir_okay=False, path_type=Path),
+    help="Output path for the pipeline result JSON.",
+)
 @click.option("-v", "--verbose", is_flag=True, help="Emit debug logging.")
 def run(config: Path, begin: str | None, end: str | None, input: Path | None, output: Path, verbose: bool) -> None:
-    """Run the pipeline through a beginning and end state.
+    """Run the pipeline through a beginning and end stage.
 
-    A beginning or end stage is one of: generator, validator, selector, transformation, or mapper.
+    \b
+    Examples
+    --------
+
+    Run the full pipeline:
+
+        openplaceholder run -c config.toml --end mapper -o network.json
+
+    Generate and validate only:
+
+        openplaceholder run -c config.toml --begin generator --end validator -o validated.json
+
+    Resume from a prior JSON output:
+
+        openplaceholder run -c config.toml -i generated_structures.json --begin validator -o network.json
     """
     logging.basicConfig(level=logging.DEBUG if verbose else logging.INFO)
 
