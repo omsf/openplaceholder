@@ -17,7 +17,6 @@ from openplaceholder.core.generation.generator import (
 from openplaceholder.core.resolver import _build_plugin, load_toml
 from openplaceholder.core.selection.validator import Validator
 from openplaceholder.core.serialization import (
-    JSONSerializable,
     OPHEncoder,
     from_json,
 )
@@ -54,7 +53,7 @@ def cli() -> None:
 )
 @click.option("-o", "--output", required=True, type=click.Path(dir_okay=False, path_type=Path))
 @click.option("-v", "--verbose", is_flag=True, help="Emit debug logging.")
-def run(config: Path, begin: str | None, end: str | None, input: Path| None, output: Path, verbose: bool) -> None:
+def run(config: Path, begin: str | None, end: str | None, input: Path | None, output: Path, verbose: bool) -> None:
     """Run the pipeline through a beginning and end state.
 
     A beginning or end stage is one of: generator, validator, selector, transformation, or mapper.
@@ -116,7 +115,6 @@ def run(config: Path, begin: str | None, end: str | None, input: Path| None, out
             new.append(StructureSet.from_structures(validated_structures))
         return new
 
-
     if input is not None:
         data = from_json(input.read_text())
     else:
@@ -140,6 +138,7 @@ def run(config: Path, begin: str | None, end: str | None, input: Path| None, out
             output.write_text(cast(str, data.to_json()))
         case _:
             output.write_text(json.dumps(data, cls=OPHEncoder))
+
 
 @cli.group()
 def diagnostics() -> None:
