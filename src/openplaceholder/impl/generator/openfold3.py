@@ -4,6 +4,7 @@ import logging
 import random
 import re
 import shutil
+from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -143,9 +144,25 @@ experiment_settings:
         import subprocess
 
         cmd = self._build_subprocess_command()
-        with subprocess.Popen(cmd, cwd=self._config.generator_directory) as proc:
-            # TODO check output
-            _ = proc.wait()
+        # hold on to tail of output logs in case the run fails
+        tail: deque[str] = deque(maxlen=20)
+        with subprocess.Popen(
+            cmd,
+            cwd=self._config.generator_directory,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        ) as proc:
+            assert proc.stdout is not None
+            for line in proc.stdout:
+                line = line.rstrip()
+                logger.debug("openfold3: %s", line)
+                tail.append(line)
+            returncode = proc.wait()
+
+        if returncode != 0:
+            logger.error("openfold3 exited with %d; last output:\n%s", returncode, "\n".join(tail))
+            raise RuntimeError(f"openfold3 exited with a non-zero return code: {returncode}. See the log for details.")
 
     def _run_openfold_in_process(self) -> None:
         # avoid implementing this for now: it would mean calling OpenFold3's
@@ -153,6 +170,18 @@ experiment_settings:
         # rather than its stable CLI entry point, opening us up to chasing a
         # potentially unstable API across releases.
         raise NotImplementedError
+
+    def _failure_context(self, err_log_size: int = 20) -> str:
+        """Extract debugging information from openfold3 logs."""
+        output_dir = Path(self._config.generator_directory) / "output"
+
+        context = ""
+        if (summary := output_dir / "summary.txt").exists():
+            context += f"\n\n{summary}:\n{summary.read_text().strip()}"
+        for error_log in sorted(output_dir.glob("logs/*err*.log")):
+            tail = error_log.read_text().splitlines()[-err_log_size:]
+            context += f"\n\n{error_log} (last {len(tail)} lines):\n" + "\n".join(tail)
+        return context
 
     def _package_outputs(self) -> list[StructureGeneratorArtifact]:
 
@@ -165,7 +194,8 @@ experiment_settings:
             structures = []
             query_output = output_dir / query_name
             if not (query_output := output_dir / query_name).exists():
-                raise RuntimeError(f"Expected output for ligand in {query_output}")
+                # TODO: is this the best place to include this information?
+                raise RuntimeError(f"Expected output for ligand in {query_output}{self._failure_context()}")
             ligand_smiles = None
             for chain in query["chains"]:
                 if ligand_smiles := chain.get("smiles"):

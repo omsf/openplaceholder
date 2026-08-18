@@ -1,5 +1,8 @@
 [generation.generator]
 implementation = "openplaceholder.impl.generator.openfold3:OpenFold3Generator"
+# runs OpenFold3 through its CLI entry point as a subprocess; without this the
+# generator takes the (unimplemented) in-process path
+run_openfold_path = "run_openfold"
 n_diffusion_samples = 5
 generate_n_seeds = 5
 generator_directory = "/tmp/openfold_3_generator/tyk2"
