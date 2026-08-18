@@ -3,6 +3,7 @@
 import json
 import logging
 from enum import IntEnum, auto
+from json import JSONDecodeError
 from pathlib import Path
 from typing import Any, cast
 
@@ -58,7 +59,7 @@ def cli() -> None:
     "-i",
     "--input",
     required=False,
-    type=click.Path(dir_okay=False, path_type=Path),
+    type=click.Path(dir_okay=False, path_type=Path, exists=True),
     default=None,
     help="Input JSON file for resuming the pipeline from a prior stage.",
 )
@@ -100,7 +101,7 @@ def run(config: Path, begin: str | None, end: str | None, input: Path | None, ou
 
     match begin, end:
         case None, None:
-            raise ValueError("At least one of --begin or --end is required.")
+            raise SystemExit("At least one of --begin or --end is required.")
         case str() as b, None:
             first = Stage.__members__[b.upper()]
             last = Stage.MAPPER
@@ -111,10 +112,21 @@ def run(config: Path, begin: str | None, end: str | None, input: Path | None, ou
             first = Stage.__members__[b.upper()]
             last = Stage.__members__[e.upper()]
             if first > last:
-                raise ValueError(f"'{b.lower()}' is performed after '{e.lower()}'")
+                raise SystemExit(f"'{b.lower()}' is performed after '{e.lower()}'")
 
     if first is Stage.GENERATOR and input is not None:
-        raise ValueError("If the beginning stage is a generator, no input should be provided.")
+        raise SystemExit("If the beginning stage is a generator, no input should be provided.")
+
+    if first is not Stage.GENERATOR and input is None:
+        raise SystemExit(f"{first.name} requires an input (-i, --input)")
+
+    # initial data to be used as module input
+    data = None
+    if input is not None:
+        try:
+            data = from_json(input.read_text())
+        except JSONDecodeError:
+            raise SystemExit(f"'{input}' unable to be parsed as JSON.")
 
     config_map = load_toml(config)
 
@@ -122,7 +134,7 @@ def run(config: Path, begin: str | None, end: str | None, input: Path | None, ou
         node = config_map
         for key in path_parts:
             if not isinstance(node, dict) or key not in node:
-                raise ValueError(f"Missing required config key: {'.'.join(path_parts)}")
+                raise SystemExit(f"Missing required config key: {'.'.join(path_parts)}")
             node = node[key]
         return node
 
@@ -140,7 +152,7 @@ def run(config: Path, begin: str | None, end: str | None, input: Path | None, ou
         node = _resolve(path)
         if expect_list:
             if not isinstance(node, list):
-                raise ValueError(f"'config['{':'.join(path)}'] must be a TOML array of tables")
+                raise SystemExit(f"'config['{':'.join(path)}'] must be a TOML array of tables")
             stage_plugins = [(Stage(i), _build_plugin(val)) for val in node]
         else:
             stage_plugins = [(Stage(i), _build_plugin(node))]
@@ -152,11 +164,6 @@ def run(config: Path, begin: str | None, end: str | None, input: Path | None, ou
             validated_structures = validator.validate_structures(artifact.structures)
             new.append(StructureSet.from_structures(validated_structures))
         return new
-
-    if input is not None:
-        data = from_json(input.read_text())
-    else:
-        data = None
 
     for stage_type, plugin in plugins:
         match stage_type:
