@@ -13,7 +13,7 @@ from gufe.tokenization import GufeTokenizable
 
 from openplaceholder.core.diagnostics import alchemicalnetwork_to_ligands_sdf
 from openplaceholder.core.generation.generator import (
-    StructureGeneratorArtifact,
+    ArtifactBundle,
 )
 from openplaceholder.core.resolver import _build_plugin, load_toml
 from openplaceholder.core.selection.validator import Validator
@@ -158,11 +158,11 @@ def run(config: Path, begin: str | None, end: str | None, input: Path | None, ou
             stage_plugins = [(Stage(i), _build_plugin(node))]
         plugins.extend(stage_plugins)
 
-    def _apply_validator(data: list[StructureGeneratorArtifact], validator: Validator) -> list[StructureSet]:
+    def _apply_validator(data: ArtifactBundle, validator: Validator) -> list[StructureSet]:
         new = []
         for artifact in data:
-            validated_structures = validator.validate_structures(artifact.structures)
-            new.append(StructureSet.from_structures(validated_structures))
+            validated_structures = validator.validate_structures(artifact)
+            new.append(StructureSet(validated_structures))
         return new
 
     for stage_type, plugin in plugins:
@@ -170,7 +170,7 @@ def run(config: Path, begin: str | None, end: str | None, input: Path | None, ou
             case Stage.GENERATOR:
                 data = plugin.run()
             case Stage.VALIDATOR:
-                data = _apply_validator(cast(list[StructureGeneratorArtifact], data), plugin)
+                data = _apply_validator(cast(ArtifactBundle, data), plugin)
             case Stage.SELECTOR:
                 data = plugin.select(data)
             case Stage.TRANSFORMATION:

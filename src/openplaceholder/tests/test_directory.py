@@ -2,7 +2,10 @@ import tempfile
 
 import pytest
 
-from openplaceholder.core.generation.generator import StructureGeneratorArtifact
+from openplaceholder.core.generation.generator import (
+    ArtifactBundle,
+    StructureGeneratorArtifact,
+)
 from openplaceholder.impl.generator.archiver import (
     DirectoryArchiver,
     DirectoryArchiverConfig,
@@ -25,7 +28,7 @@ class TestDirectoryGenerator:
             artifact = StructureGeneratorArtifact.from_structures(make_structures(n_structures=3))
 
             archiver = DirectoryArchiver(DirectoryArchiverConfig(path=tmpdir))
-            archiver.write([artifact])
+            archiver.write(ArtifactBundle([artifact]))
 
             loaded = DirectoryGenerator(DirectoryGeneratorConfig(path=tmpdir)).run()
             assert len(loaded) == 1

@@ -1,6 +1,9 @@
 import tempfile
 
-from openplaceholder.core.generation.generator import StructureGeneratorArtifact
+from openplaceholder.core.generation.generator import (
+    ArtifactBundle,
+    StructureGeneratorArtifact,
+)
 from openplaceholder.impl.generator.archiver import JSONArchiver, JSONArchiverConfig
 from openplaceholder.tests.helpers import make_structures
 
@@ -12,7 +15,7 @@ class TestJSONArchiver:
         with tempfile.NamedTemporaryFile() as tmpfile:
             artifact = StructureGeneratorArtifact.from_structures(make_structures(n_structures=3))
             archiver = JSONArchiver(JSONArchiverConfig(path=tmpfile.name))
-            archiver.write([artifact])
+            archiver.write(ArtifactBundle([artifact]))
             loaded = archiver.read()
 
             assert len(loaded) == 1

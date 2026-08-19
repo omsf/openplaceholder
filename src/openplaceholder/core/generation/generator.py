@@ -1,7 +1,9 @@
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Self
+from typing import Any, Iterator, Self
+
+from gufe.tokenization import GufeTokenizable
 
 from openplaceholder.core.configuration import ConfigBase
 from openplaceholder.core.interface import Module
@@ -10,16 +12,36 @@ from openplaceholder.core.structure import Structure, StructureSet
 logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True)
 class StructureGeneratorArtifact(StructureSet):
 
-    sequence: str
-    ligand_smiles: str
-    ligand_name: str
+    def __init__(self, structures: list[Structure], sequence: str, ligand_smiles: str, ligand_name: str) -> None:
+        self.sequence = sequence
+        self.ligand_smiles = ligand_smiles
+        self.ligand_name = ligand_name
+        super().__init__(structures=structures)
+
+    def _to_dict(self) -> dict[Any, Any]:
+        d = super()._to_dict()
+        d["sequence"] = self.sequence
+        d["ligand_smiles"] = self.ligand_smiles
+        d["ligand_name"] = self.ligand_name
+        return d
+
+    @classmethod
+    def _from_dict(cls, dct: dict[Any, Any]) -> Self:
+        return cls(**dct)
+
+    @classmethod
+    def _defaults(cls) -> dict[Any, Any]:
+        d = super()._defaults()
+        d["sequence"] = ""
+        d["ligand_smiles"] = ""
+        d["ligand_name"] = ""
+        return d
 
     @classmethod
     def from_structures(cls, structures: list[Structure]) -> Self:
-        structures = StructureSet.from_structures(structures).structures
+        structures = StructureSet(structures).structures
 
         sequences = set()
         ligands_smiles = set()
@@ -39,6 +61,32 @@ class StructureGeneratorArtifact(StructureSet):
         return cls(structures=structures, sequence=sequence, ligand_smiles=ligand_smiles, ligand_name=ligand_name)
 
 
+class ArtifactBundle(GufeTokenizable):
+
+    def __init__(self, artifacts: list[StructureGeneratorArtifact]):
+        self.artifacts = artifacts
+
+    @classmethod
+    def _defaults(cls) -> dict[Any, Any]:
+        return {"artifacts": []}
+
+    @classmethod
+    def _from_dict(cls, dct: dict[Any, Any]) -> Self:
+        return cls(**dct)
+
+    def _to_dict(self) -> dict[Any, Any]:
+        return {"artifacts": self.artifacts}
+
+    def __iter__(self) -> Iterator[StructureGeneratorArtifact]:
+        return iter(self.artifacts)
+
+    def __len__(self) -> int:
+        return len(self.artifacts)
+
+    def __getitem__(self, key: int) -> StructureGeneratorArtifact:
+        return self.artifacts[key]
+
+
 _ARCHIVER_REGISTRY: dict[str, "type[ArtifactArchiver]"] = {}
 
 
@@ -51,22 +99,22 @@ class ArtifactArchiver(ABC):
         logger.debug("registered ArtifactArchiver: %s", str(cls))
 
     @abstractmethod
-    def _write(self, artifacts: list["StructureGeneratorArtifact"]) -> None:
+    def _write(self, artifacts: ArtifactBundle) -> None:
         raise NotImplementedError
 
     @abstractmethod
-    def _read(self) -> list["StructureGeneratorArtifact"]:
+    def _read(self) -> ArtifactBundle:
         raise NotImplementedError
 
     @abstractmethod
     def _archive_exists(self) -> bool:
         raise NotImplementedError
 
-    def write(self, artifacts: list["StructureGeneratorArtifact"]) -> None:
+    def write(self, artifacts: ArtifactBundle) -> None:
         logger.debug("writing artifacts with %s", self.__class__.__name__)
         return self._write(artifacts)
 
-    def read(self) -> list["StructureGeneratorArtifact"]:
+    def read(self) -> ArtifactBundle:
         logger.debug("reading artifacts with %s", self.__class__.__name__)
         return self._read()
 
@@ -86,14 +134,14 @@ class StructureGenerator(Module, ABC):
         self.validate_inputs()
 
     @abstractmethod
-    def _run(self) -> list[StructureGeneratorArtifact]:
+    def _run(self) -> ArtifactBundle:
         raise NotImplementedError
 
     @abstractmethod
     def _validate_inputs(self) -> None:
         raise NotImplementedError
 
-    def run(self) -> list[StructureGeneratorArtifact]:
+    def run(self) -> ArtifactBundle:
         logger.info("running %s", self.__class__.__name__)
         artifacts = self._run()
         return artifacts

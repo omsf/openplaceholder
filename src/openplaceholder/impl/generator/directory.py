@@ -3,8 +3,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from openplaceholder.core.generation.generator import (
+    ArtifactBundle,
     StructureGenerator,
-    StructureGeneratorArtifact,
     StructureGeneratorConfigBase,
 )
 from openplaceholder.impl.generator.archiver import (
@@ -28,7 +28,7 @@ class DirectoryGenerator(StructureGenerator):
         self._archiver: DirectoryArchiver = DirectoryArchiver(DirectoryArchiverConfig(path=self._config.path))
         self.validate_inputs()
 
-    def _run(self) -> list[StructureGeneratorArtifact]:
+    def _run(self) -> ArtifactBundle:
         logger.debug("deferring to DirectoryArchiver for artifact generation")
         return self._archiver.read()
 

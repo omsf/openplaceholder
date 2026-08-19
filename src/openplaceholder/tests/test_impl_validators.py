@@ -1,6 +1,6 @@
 import base64
 
-from openplaceholder.core.structure import Structure
+from openplaceholder.core.structure import Structure, StructureSet
 from openplaceholder.impl.validators import (
     ClashValidator,
     ClashValidatorConfig,
@@ -50,4 +50,4 @@ class TestPosebustersValidator:
             structure_data=base64.b64encode(_UNPERCEIVABLE_LIGAND.encode()).decode(),
         )
         validator = PosebustersValidator(PosebustersValidatorConfig())
-        assert validator.validate_structures([structure]) == []
+        assert len(validator.validate_structures(StructureSet([structure]))) == 0

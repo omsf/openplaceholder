@@ -2,7 +2,10 @@ import tempfile
 
 import pytest
 
-from openplaceholder.core.generation.generator import StructureGeneratorArtifact
+from openplaceholder.core.generation.generator import (
+    ArtifactBundle,
+    StructureGeneratorArtifact,
+)
 from openplaceholder.impl.generator.archiver import (
     JSONArchiver,
     JSONArchiverConfig,
@@ -25,7 +28,7 @@ class TestJSONGenerator:
             artifact = StructureGeneratorArtifact.from_structures(make_structures(n_structures=3))
 
             archiver = JSONArchiver(JSONArchiverConfig(path=tmpfile.name))
-            archiver.write([artifact])
+            archiver.write(ArtifactBundle([artifact]))
 
             loaded = JSONGenerator(JSONGeneratorConfig(path=tmpfile.name)).run()
             assert len(loaded) == 1

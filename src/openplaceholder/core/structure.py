@@ -1,24 +1,20 @@
 """Structure definitions."""
 
 import base64
-import hashlib
 import io
-import json
 import logging
-from dataclasses import asdict, dataclass, fields, replace
 from enum import StrEnum
 from functools import cache
-from pathlib import Path
 from typing import Any, Iterator, Self, cast
 
 import MDAnalysis as mda
 import numpy as np
+from gufe.tokenization import GufeTokenizable
 from MDAnalysis import Universe
 from rdkit import Chem
 from rdkit.Chem import AllChem, rdDetermineBonds
 from rdkit.Geometry import Point3D
 
-from openplaceholder.core.serialization import JSONSerializable, to_shallow_dict
 from openplaceholder.core.utils import _quiet_rdkit_warnings
 
 logger = logging.getLogger(__name__)
@@ -128,20 +124,40 @@ class StructureFormat(StrEnum):
                 raise UnsupportedFormatError(f"Unsupported structure suffix: '{suffix}'")
 
 
-@dataclass(frozen=True)
-class Structure(JSONSerializable):
-    sequence: str
-    ligand_smiles: str
-    ligand_name: str
-    structure_format: str
-    structure_data: str
+class Structure(GufeTokenizable):
 
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "structure_format", StructureFormat(self.structure_format.upper()).value)
+    def __init__(
+        self, sequence: str, ligand_smiles: str, ligand_name: str, structure_format: str, structure_data: str
+    ) -> None:
+        self.sequence = sequence
+        self.ligand_smiles = ligand_smiles
+        self.ligand_name = ligand_name
+        self.structure_format = StructureFormat(structure_format.upper()).value
+        self.structure_data = structure_data
+        super().__init__()
 
-    def key(self) -> str:
-        parts = [getattr(self, f.name) for f in fields(self)]
-        return hashlib.sha256("\x00".join(parts).encode()).hexdigest()
+    @classmethod
+    def _defaults(cls) -> dict[Any, Any]:
+        return {
+            "sequence": "",
+            "ligand_smiles": "",
+            "ligand_name": "",
+            "structure_format": StructureFormat.PDB,
+            "structure_data": "",
+        }
+
+    def _to_dict(self) -> dict[Any, Any]:
+        return {
+            "sequence": self.sequence,
+            "ligand_smiles": self.ligand_smiles,
+            "ligand_name": self.ligand_name,
+            "structure_format": self.structure_format,
+            "structure_data": self.structure_data,
+        }
+
+    @classmethod
+    def _from_dict(cls, dct: dict[Any, Any]) -> Self:
+        return cls(**dct)
 
     def same_complex(self, other: Self) -> bool:
         _ = other
@@ -290,54 +306,28 @@ class Structure(JSONSerializable):
         the write-side mirror of :meth:`to_mda_universe`.
         """
         block = atoms_to_pdb_string(atoms)
-        return replace(
-            self,
+        return self.copy_with_replacements(
             structure_format=StructureFormat.PDB,
             structure_data=base64.b64encode(block.encode()).decode(),
         )
 
-    def to_dict(self) -> dict[Any, Any]:
-        return to_shallow_dict(self)
 
-    @classmethod
-    def from_dict(cls, data: dict[Any, Any]) -> Self:
-        data.pop("__oph_custom__", None)
-        return cls(**data)
-
-
-@dataclass(frozen=True)
-class StructureSet(JSONSerializable):
+class StructureSet(GufeTokenizable):
     """A list of Structure instances with convenience methods for serialization."""
 
-    structures: list[Structure]
+    def __init__(self, structures: list[Structure]) -> None:
+        self.structures = list(sorted(structures, key=lambda s: s.key))
 
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "structures", sorted(self.structures, key=lambda s: s.key()))
-
-    @classmethod
-    def from_structures(cls, structures: list[Structure]) -> Self:
-        return cls(structures=[*{*structures}])
+    def _to_dict(self) -> dict[Any, Any]:
+        return {"structures": self.structures}
 
     @classmethod
-    def from_file(cls, file_path: str | Path) -> Self:
-        file_path = Path(file_path)
-        content = json.loads(file_path.read_text())
-        structures = [Structure(**structure) for structure in content["structures"]]
-        artifact_data = content | {"structures": structures}
-        return cls(**artifact_data)
-
-    def write(self, file_path: str | Path) -> None:
-        file_path = Path(file_path)
-        with open(file_path, "w") as f:
-            json.dump(asdict(self), f)
-
-    def to_dict(self) -> dict[Any, Any]:
-        return to_shallow_dict(self)
+    def _from_dict(cls, dct: dict[Any, Any]) -> Self:
+        return cls(**dct)
 
     @classmethod
-    def from_dict(cls, data: dict[Any, Any]) -> Self:
-        data.pop("__oph_custom__", None)
-        return cls(**data)
+    def _defaults(cls) -> dict[Any, Any]:
+        return {"structures": tuple()}
 
     def __len__(self) -> int:
         return len(self.structures)

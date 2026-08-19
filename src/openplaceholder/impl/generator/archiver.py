@@ -4,11 +4,13 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
+from gufe.tokenization import GufeTokenizable
+
 from openplaceholder.core.generation.generator import (
     ArtifactArchiver,
+    ArtifactBundle,
     StructureGeneratorArtifact,
 )
-from openplaceholder.core.serialization import OPHEncoder, from_json
 from openplaceholder.core.structure import Structure, StructureFormat
 
 logger = logging.getLogger(__name__)
@@ -24,7 +26,7 @@ class DirectoryArchiver(ArtifactArchiver):
     def __init__(self, config: DirectoryArchiverConfig):
         self._config = config
 
-    def _write(self, artifacts: list[StructureGeneratorArtifact]) -> None:
+    def _write(self, artifacts: ArtifactBundle) -> None:
         root = Path(self._config.path)
         logger.debug("creating root archive directory: %s", root)
         root.mkdir(parents=True, exist_ok=True)
@@ -42,9 +44,9 @@ class DirectoryArchiver(ArtifactArchiver):
                 suffix = StructureFormat(structure.structure_format).to_suffix()
                 (artifact_dir / f"pose_{i}{suffix}").write_bytes(structure.decode_structure_data())
 
-    def _read(self) -> list[StructureGeneratorArtifact]:
+    def _read(self) -> ArtifactBundle:
         root = Path(self._config.path)
-        artifacts: list[StructureGeneratorArtifact] = []
+        artifacts = []
         for artifact_dir in filter(lambda d: d.is_dir(), root.iterdir()):
 
             if not (archive_file := artifact_dir / "artifact.json").exists():
@@ -64,7 +66,7 @@ class DirectoryArchiver(ArtifactArchiver):
                     structures.append(Structure(**structure_params))
             if structures:
                 artifacts.append(StructureGeneratorArtifact(structures=structures, **meta))
-        return artifacts
+        return ArtifactBundle(artifacts)
 
     def _archive_exists(self) -> bool:
         root = Path(self._config.path)
@@ -83,22 +85,18 @@ class JSONArchiver(ArtifactArchiver):
     def __init__(self, config: JSONArchiverConfig):
         self._config = config
 
-    def _read(self) -> list[StructureGeneratorArtifact]:
+    def _read(self) -> ArtifactBundle:
         path = Path(self._config.path)
         content = path.read_text()
         logger.debug("loaded achive data from %s", path)
-        decoded = from_json(content)
-
-        if not (isinstance(decoded, list) and all(isinstance(v, StructureGeneratorArtifact) for v in decoded)):
-            logger.exception("unable to decode %s", path)
-            raise ValueError(decoded)
-
+        decoded = GufeTokenizable.from_json(content=content)
         return decoded
 
-    def _write(self, artifacts: list[StructureGeneratorArtifact]) -> None:
+    def _write(self, artifacts: ArtifactBundle) -> None:
         path = Path(self._config.path)
         logger.debug("dumping json")
-        _json = json.dumps(artifacts, cls=OPHEncoder)
+
+        _json = artifacts.to_json()
         logger.debug("writing json to %s", path)
         path.write_text(_json)
 
