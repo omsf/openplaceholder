@@ -1,8 +1,35 @@
+import hashlib
 import json
 from abc import ABC, abstractmethod
 from typing import Any, Self
 
 _JSON_SERDE_CLASS_REGISTRY: dict[str, "type[JSONSerializable]"] = {}
+
+
+class InvalidClassEncoding(Exception): ...
+
+
+def oph_json_hook(dct: dict[Any, Any]) -> Any:
+    """JSON decoder hook."""
+
+    if (obj_type := dct.get("__oph_custom__", None)) is None:
+        return dct
+    if (cls := _JSON_SERDE_CLASS_REGISTRY.get(obj_type, None)) is not None:
+        dct.pop("__oph_custom__")
+        return cls.from_dict(dct)
+
+    raise InvalidClassEncoding()
+
+
+class OPHEncoder(json.JSONEncoder):
+
+    def default(self, o: Any) -> Any:
+        match o:
+            case JSONSerializable():
+                dct = o.to_dict()
+                return {"__oph_custom__": f"{o.__class__.__module__}.{o.__class__.__qualname__}", **dct}
+            case _:
+                return super().default(o)
 
 
 class JSONSerializable(ABC):
@@ -22,6 +49,27 @@ class JSONSerializable(ABC):
 
         return dict(fields)
 
+    def checksum(self) -> str:
+        return hashlib.md5(self.to_json().encode()).hexdigest()
+
+    def to_json(self) -> str:
+        return json.dumps(
+            self.to_dict() | {"__oph_custom__": f"{self.__class__.__module__}.{self.__class__.__qualname__}"},
+            cls=OPHEncoder,
+            sort_keys=True,
+        )
+
+    @classmethod
+    def from_json(cls, content: str) -> Self:
+        obj = json.loads(content, object_hook=oph_json_hook)
+
+        if not isinstance(obj, cls):
+            raise ValueError(
+                f"Deserialized content is not an instance of `{cls.__name__}`, got `{obj.__class__.__name__}`"
+            )
+
+        return obj
+
     @classmethod
     @abstractmethod
     def from_dict(cls, data: dict[Any, Any]) -> Self: ...
@@ -30,38 +78,15 @@ class JSONSerializable(ABC):
     def to_dict(self) -> dict[Any, Any]: ...
 
 
-class InvalidClassEncoding(Exception): ...
-
-
-class OPHEncoder(json.JSONEncoder):
-
-    def default(self, obj: Any) -> Any:
-        match obj:
-            case JSONSerializable():
-                dct = obj.to_dict()
-                return {"__oph_custom__": f"{obj.__class__.__module__}.{obj.__class__.__qualname__}", **dct}
-            case _:
-                return super().default(obj)
-
-
-def oph_json_hook(dct: dict[Any, Any]) -> Any:
-    """JSON decoder hook."""
-
-    if (obj_type := dct.get("__oph_custom__", None)) is None:
-        return dct
-    if (cls := _JSON_SERDE_CLASS_REGISTRY.get(obj_type, None)) is not None:
-        return cls.from_dict(dct)
-
-    raise InvalidClassEncoding()
-
-
 def to_shallow_dict(obj: JSONSerializable) -> dict[Any, Any]:
     return {key: value for key, value in obj.__dict__.items()}
 
 
 def to_json(obj: JSONSerializable) -> str:
     return json.dumps(
-        obj.to_dict() | {"__oph_custom__": f"{obj.__class__.__module__}.{obj.__class__.__qualname__}"}, cls=OPHEncoder
+        obj.to_dict() | {"__oph_custom__": f"{obj.__class__.__module__}.{obj.__class__.__qualname__}"},
+        cls=OPHEncoder,
+        sort_keys=True,
     )
 
 

@@ -161,8 +161,8 @@ def run(config: Path, begin: str | None, end: str | None, input: Path | None, ou
     def _apply_validator(data: list[StructureGeneratorArtifact], validator: Validator) -> list[StructureSet]:
         new = []
         for artifact in data:
-            validated_structures = validator.validate_structures(artifact.structures)
-            new.append(StructureSet.from_structures(validated_structures))
+            validated_structures = validator.validate_structures(artifact)
+            new.append(validated_structures)
         return new
 
     for stage_type, plugin in plugins:

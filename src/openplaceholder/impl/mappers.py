@@ -9,7 +9,7 @@ from openfe.setup.alchemical_network_planner import RBFEAlchemicalNetworkPlanner
 from openff.units import unit
 
 from openplaceholder.core.assembly.mapper import Mapper, MapperConfigBase
-from openplaceholder.core.structure import Structure
+from openplaceholder.core.structure import Structure, StructureSet
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ class LOMAPMapper(Mapper):
     def _setup(self) -> None:
         pass
 
-    def _map(self, structures: list[Structure]) -> AlchemicalNetwork:
+    def _map(self, structures: StructureSet) -> AlchemicalNetwork:
         _ = structures
         raise NotImplementedError
 
@@ -42,7 +42,7 @@ class KartografMapper(Mapper):
     def _setup(self) -> None:
         pass
 
-    def _map(self, structures: list[Structure]) -> AlchemicalNetwork:
+    def _map(self, structures: StructureSet) -> AlchemicalNetwork:
         ligand_network: LigandNetwork = self._create_ligand_network(structures)
         solvent = openfe.SolventComponent(
             ion_concentration=0.15 * unit.molar,
@@ -73,7 +73,7 @@ class KartografMapper(Mapper):
         return contents
 
     @staticmethod
-    def _create_ligand_network(structures: list[Structure]) -> LigandNetwork:
+    def _create_ligand_network(structures: StructureSet) -> LigandNetwork:
         """Create a ligand network from a list of provided structures.
 
         Ligands contained in the structures are extracted, converted

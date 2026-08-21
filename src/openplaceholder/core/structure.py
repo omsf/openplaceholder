@@ -9,7 +9,7 @@ from dataclasses import asdict, dataclass, fields, replace
 from enum import StrEnum
 from functools import cache
 from pathlib import Path
-from typing import Any, Iterator, Self, cast
+from typing import Any, Iterator, Self, cast, overload
 
 import MDAnalysis as mda
 import numpy as np
@@ -345,5 +345,11 @@ class StructureSet(JSONSerializable):
     def __iter__(self) -> Iterator[Structure]:
         yield from self.structures
 
-    def __getitem__(self, key: int) -> Structure:
+    @overload
+    def __getitem__(self, key: int) -> Structure: ...
+
+    @overload
+    def __getitem__(self, key: slice) -> list[Structure]: ...
+
+    def __getitem__(self, key):  # type: ignore
         return self.structures[key]

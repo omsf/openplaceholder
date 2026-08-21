@@ -69,7 +69,7 @@ class MPOSelector(Selector):
         params = {k: v for k, v in settings.items() if k != "weight"}
         return cls(config=config_type(**params))
 
-    def _select(self, structures: list[StructureSet]) -> list[Structure]:
+    def _select(self, structures: list[StructureSet]) -> StructureSet:
         pool, groups = self._flatten(structures)
         if len(pool) > self._MAX_POOL_SIZE_BATCHED:
             raise NotImplementedError(
@@ -80,7 +80,7 @@ class MPOSelector(Selector):
             )
         combined = self._combine(pool)
         chosen = self._optimize_batched(combined, groups)
-        return [pool[i] for i in chosen]
+        return StructureSet.from_structures([pool[i] for i in chosen])
 
     @staticmethod
     def _flatten(

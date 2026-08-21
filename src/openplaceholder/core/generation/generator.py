@@ -81,6 +81,9 @@ class StructureGeneratorConfigBase(ConfigBase):
 
 class StructureGenerator(Module, ABC):
 
+    _input_type = None
+    _output_type = list[StructureGeneratorArtifact]
+
     def __init__(self, config: StructureGeneratorConfigBase) -> None:
         super().__init__(config)
         self.validate_inputs()

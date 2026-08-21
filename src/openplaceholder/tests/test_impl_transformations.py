@@ -4,7 +4,7 @@ import importlib.util
 import numpy as np
 import pytest
 
-from openplaceholder.core.structure import Structure
+from openplaceholder.core.structure import Structure, StructureSet
 from openplaceholder.impl.transformations import (
     ComplexProtonationTransformation,
     ComplexProtonationTransformationConfig,
@@ -76,7 +76,7 @@ class TestMaxVolumeSiteSubstitutionTransformation:
         )
 
         result = MaxVolumeSiteSubstitutionTransformation(MaxVolumeSiteSubstitutionTransformationConfig()).transform(
-            [canonical, shifted]
+            StructureSet.from_structures([canonical, shifted])
         )
 
         assert {s.ligand_name for s in result} == {"canonical", "shifted"}
@@ -91,7 +91,9 @@ class TestHeavyAtomAdditionTransformation:
         complex_ = _tyk2_complex()
         raw_heavy = len(complex_.protein_atoms().select_atoms("not element H"))
 
-        prepared = HeavyAtomAdditionTransformation(HeavyAtomAdditionTransformationConfig()).transform([complex_])[0]
+        prepared = HeavyAtomAdditionTransformation(HeavyAtomAdditionTransformationConfig()).transform(
+            StructureSet.from_structures([complex_])
+        )[0]
         protein = prepared.protein_atoms()
 
         # PDBFixer fills missing heavy atoms; adding hydrogens is ComplexProtonation's job, not this one's
@@ -106,7 +108,7 @@ class TestComplexProtonationTransformation:
         complex_ = _tyk2_complex()
 
         protonated = ComplexProtonationTransformation(ComplexProtonationTransformationConfig(ph=7.0)).transform(
-            [complex_]
+            StructureSet([complex_])
         )[0]
 
         universe = protonated.to_mda_universe()
