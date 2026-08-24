@@ -312,11 +312,7 @@ class StructureSet(JSONSerializable):
     structures: list[Structure]
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "structures", sorted(self.structures, key=lambda s: s.key()))
-
-    @classmethod
-    def from_structures(cls, structures: list[Structure]) -> Self:
-        return cls(structures=[*{*structures}])
+        object.__setattr__(self, "structures", sorted(set(self.structures), key=lambda s: s.key()))
 
     @classmethod
     def from_file(cls, file_path: str | Path) -> Self:

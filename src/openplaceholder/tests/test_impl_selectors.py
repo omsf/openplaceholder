@@ -14,7 +14,7 @@ class TestMPOSelector:
 
     def test_select_raises_when_pool_too_large(self) -> None:
         selector = MPOSelector(MPOSelectorConfig(objectives={}))
-        too_many = StructureSet.from_structures(make_structures(MPOSelector._MAX_POOL_SIZE_BATCHED + 1))
+        too_many = StructureSet(make_structures(MPOSelector._MAX_POOL_SIZE_BATCHED + 1))
         with pytest.raises(NotImplementedError):
             selector.select([too_many])
 

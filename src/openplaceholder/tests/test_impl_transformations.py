@@ -76,7 +76,7 @@ class TestMaxVolumeSiteSubstitutionTransformation:
         )
 
         result = MaxVolumeSiteSubstitutionTransformation(MaxVolumeSiteSubstitutionTransformationConfig()).transform(
-            StructureSet.from_structures([canonical, shifted])
+            StructureSet([canonical, shifted])
         )
 
         assert {s.ligand_name for s in result} == {"canonical", "shifted"}
@@ -92,7 +92,7 @@ class TestHeavyAtomAdditionTransformation:
         raw_heavy = len(complex_.protein_atoms().select_atoms("not element H"))
 
         prepared = HeavyAtomAdditionTransformation(HeavyAtomAdditionTransformationConfig()).transform(
-            StructureSet.from_structures([complex_])
+            StructureSet([complex_])
         )[0]
         protein = prepared.protein_atoms()
 

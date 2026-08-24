@@ -80,7 +80,7 @@ class MPOSelector(Selector):
             )
         combined = self._combine(pool)
         chosen = self._optimize_batched(combined, groups)
-        return StructureSet.from_structures([pool[i] for i in chosen])
+        return StructureSet([pool[i] for i in chosen])
 
     @staticmethod
     def _flatten(

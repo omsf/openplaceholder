@@ -19,7 +19,7 @@ class StructureGeneratorArtifact(StructureSet):
 
     @classmethod
     def from_structures(cls, structures: list[Structure]) -> Self:
-        structures = StructureSet.from_structures(structures).structures
+        structures = StructureSet(structures).structures
 
         sequences = set()
         ligands_smiles = set()

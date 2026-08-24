@@ -79,7 +79,7 @@ class MaxVolumeSiteSubstitutionTransformation(Transformation):
                 reference_structure = s
         u_reference = reference_structure.to_mda_universe()
         canonical_protein = u_reference.select_atoms("protein")
-        return StructureSet.from_structures([self._substitute(s, u_reference, canonical_protein) for s in structures])
+        return StructureSet([self._substitute(s, u_reference, canonical_protein) for s in structures])
 
     @staticmethod
     def _substitute(structure: Structure, reference: mda.Universe, canonical_protein: mda.AtomGroup) -> Structure:
@@ -104,7 +104,7 @@ class HeavyAtomAdditionTransformation(Transformation):
         pass
 
     def _transform(self, structures: StructureSet) -> StructureSet:
-        return StructureSet.from_structures([self._prepare_protein(s) for s in structures])
+        return StructureSet([self._prepare_protein(s) for s in structures])
 
     def _prepare_protein(self, structure: Structure) -> Structure:
 
@@ -144,7 +144,7 @@ class ComplexProtonationTransformation(Transformation):
         pass
 
     def _transform(self, structures: StructureSet) -> StructureSet:
-        return StructureSet.from_structures([self._protonate_protein(self._protonate_ligand(s)) for s in structures])
+        return StructureSet([self._protonate_protein(self._protonate_ligand(s)) for s in structures])
 
     def _protonate_ligand(self, structure: Structure) -> Structure:
         mol: Chem.Mol = protonate_molecule(structure.to_rdkit_ligand_mol(), self._config.ph)  # type: ignore[no-untyped-call]

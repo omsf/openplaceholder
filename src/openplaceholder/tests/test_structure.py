@@ -149,14 +149,14 @@ def structures() -> list[Structure]:
 class TestStructureSet:
 
     def test_from_structures(self, structures: list[Structure]) -> None:
-        ss_one_to_one = StructureSet.from_structures(structures)
+        ss_one_to_one = StructureSet(structures)
         assert len(ss_one_to_one) == len(structures)
 
-        ss_doubled_input = StructureSet.from_structures(structures + structures)
+        ss_doubled_input = StructureSet(structures + structures)
         assert len(ss_doubled_input) == len(structures)
 
     def test_write(self, structures: list[Structure]) -> None:
-        ss = StructureSet.from_structures(structures)
+        ss = StructureSet(structures)
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "structures.json"
             ss.write(path)
@@ -166,11 +166,11 @@ class TestStructureSet:
             assert content.structures == ss.structures
 
     def test_from_file(self, structures: list[Structure]) -> None:
-        ss = StructureSet.from_structures(structures)
+        ss = StructureSet(structures)
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "structures.json"
             ss.write(path)
             loaded = StructureSet.from_file(path)
             assert len(loaded) == len(structures)
-            loaded_deduped = StructureSet.from_structures(loaded.structures)
+            loaded_deduped = StructureSet(loaded.structures)
             assert len(loaded_deduped) == len(loaded)

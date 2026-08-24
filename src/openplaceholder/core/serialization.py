@@ -1,3 +1,5 @@
+"""Custom JSON serialization interface for openplaceholder objects."""
+
 import hashlib
 import json
 from abc import ABC, abstractmethod
