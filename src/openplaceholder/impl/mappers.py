@@ -9,7 +9,7 @@ from openfe.setup.alchemical_network_planner import RBFEAlchemicalNetworkPlanner
 from openff.units import unit
 
 from openplaceholder.core.assembly.mapper import Mapper, MapperConfigBase
-from openplaceholder.core.structure import Structure
+from openplaceholder.core.structure import Structure, StructureSeries
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ class LOMAPMapper(Mapper):
     def _setup(self) -> None:
         pass
 
-    def _map(self, structures: list[Structure]) -> AlchemicalNetwork:
+    def _map(self, structures: StructureSeries) -> AlchemicalNetwork:
         _ = structures
         raise NotImplementedError
 
@@ -42,7 +42,7 @@ class KartografMapper(Mapper):
     def _setup(self) -> None:
         pass
 
-    def _map(self, structures: list[Structure]) -> AlchemicalNetwork:
+    def _map(self, structures: StructureSeries) -> AlchemicalNetwork:
         ligand_network: LigandNetwork = self._create_ligand_network(structures)
         solvent = openfe.SolventComponent(
             ion_concentration=0.15 * unit.molar,
@@ -50,7 +50,7 @@ class KartografMapper(Mapper):
             negative_ion="Cl",
             neutralize=True,
         )
-        protein: openfe.ProteinComponent = self._extract_protein(structures[0])
+        protein: openfe.ProteinComponent = self._extract_protein(structures.series[0])
         # This chooses RelativeHybridTopologyProtocol, along with its
         # default settings, by default
         planner = RBFEAlchemicalNetworkPlanner()
@@ -73,8 +73,8 @@ class KartografMapper(Mapper):
         return contents
 
     @staticmethod
-    def _create_ligand_network(structures: list[Structure]) -> LigandNetwork:
-        """Create a ligand network from a list of provided structures.
+    def _create_ligand_network(structures: StructureSeries) -> LigandNetwork:
+        """Create a ligand network from a StructureSeries.
 
         Ligands contained in the structures are extracted, converted
         to SmallMoleculeComponents, and used to plan a LigandNetwork
@@ -82,7 +82,7 @@ class KartografMapper(Mapper):
         """
         ligands = []
         logger.debug("building ligand network from %d structures", len(structures))
-        for structure in structures:
+        for structure in structures.iter_series():
             logger.debug("recovering ligand %s from structure", structure.ligand_name)
             mol = structure.to_rdkit_ligand_mol()
             smc = openfe.SmallMoleculeComponent(mol, name=structure.ligand_name)

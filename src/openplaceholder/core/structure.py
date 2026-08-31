@@ -325,7 +325,7 @@ class StructureReplicates(GufeTokenizable):  # type: ignore
 
         if len(self.replicates) == 0:
             # TODO: error message
-            raise ValueError()
+            raise EmptyReplicateError()
 
         if not self._all_shared_complex():
             # TODO: error message
