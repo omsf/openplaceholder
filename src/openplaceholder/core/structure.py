@@ -324,12 +324,10 @@ class StructureReplicates(GufeTokenizable):  # type: ignore
         self.replicates = replicates
 
         if len(self.replicates) == 0:
-            # TODO: error message
-            raise EmptyReplicateError()
+            raise EmptyReplicateError("StructureReplicate cannot be empty")
 
         if not self._all_shared_complex():
-            # TODO: error message
-            raise ValueError
+            raise ValueError("StructureReplicate can only contain structures representing the same complex")
 
         self.ligand_name = self.replicates[0].ligand_name
         self.ligand_smiles = self.replicates[0].ligand_smiles
@@ -364,6 +362,7 @@ class StructureReplicates(GufeTokenizable):  # type: ignore
     def _defaults(cls) -> dict[Any, Any]:
         return {}
 
+class EmptyStructureSetError(Exception): ...
 
 class StructureSet(GufeTokenizable):  # type: ignore
     """Collection of StructureReplicates representing a congeneric series."""
@@ -372,12 +371,10 @@ class StructureSet(GufeTokenizable):  # type: ignore
         self.replicate_sets = replicate_sets
 
         if len(self.replicate_sets) == 0:
-            # TODO: error message
-            raise ValueError
+            raise EmptyStructureSetError("StructureSet cannot be empty")
 
         if self._repeated_complexes():
-            # TODO: error message
-            raise ValueError()
+            raise ValueError("StructureSet can not contain multiple replicates representing the same complex")
 
     def iter_replicates(self) -> Iterator[StructureReplicates]:
         yield from self.replicate_sets
@@ -410,14 +407,19 @@ class StructureSet(GufeTokenizable):  # type: ignore
         return len(self.replicate_sets)
 
 
+class EmptyStructureSeriesError(Exception): ...
+
 class StructureSeries(GufeTokenizable):  # type: ignore
     """Collection of structures representing a congeneric series."""
 
     def __init__(self, series: list[Structure]):
         self.series = series
+
+        if len(self.series) == 0:
+            raise EmptyStructureSeriesError("StructureReplicate cannot be empty")
+
         if not self._no_shared_complex():
-            # TODO: error message
-            raise ValueError
+            raise ValueError("StructureSeries can not contain multiple structures representing the same complex")
 
     def _no_shared_complex(self) -> bool:
         seen = set()
