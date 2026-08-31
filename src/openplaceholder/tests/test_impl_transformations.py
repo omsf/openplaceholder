@@ -4,7 +4,7 @@ import importlib.util
 import numpy as np
 import pytest
 
-from openplaceholder.core.structure import Structure
+from openplaceholder.core.structure import Structure, StructureSeries
 from openplaceholder.impl.transformations import (
     ComplexProtonationTransformation,
     ComplexProtonationTransformationConfig,
@@ -76,11 +76,11 @@ class TestMaxVolumeSiteSubstitutionTransformation:
         )
 
         result = MaxVolumeSiteSubstitutionTransformation(MaxVolumeSiteSubstitutionTransformationConfig()).transform(
-            [canonical, shifted]
+            StructureSeries([canonical, shifted])
         )
 
-        assert {s.ligand_name for s in result} == {"canonical", "shifted"}
-        proteins = [s.protein_atoms().positions for s in result]
+        assert {s.ligand_name for s in result.iter_series()} == {"canonical", "shifted"}
+        proteins = [s.protein_atoms().positions for s in result.iter_series()]
         assert proteins[0].shape == proteins[1].shape
         assert np.allclose(proteins[0], proteins[1], atol=1e-3)
 
@@ -91,7 +91,11 @@ class TestHeavyAtomAdditionTransformation:
         complex_ = _tyk2_complex()
         raw_heavy = len(complex_.protein_atoms().select_atoms("not element H"))
 
-        prepared = HeavyAtomAdditionTransformation(HeavyAtomAdditionTransformationConfig()).transform([complex_])[0]
+        prepared = (
+            HeavyAtomAdditionTransformation(HeavyAtomAdditionTransformationConfig())
+            .transform(StructureSeries([complex_]))
+            .series[0]
+        )
         protein = prepared.protein_atoms()
 
         # PDBFixer fills missing heavy atoms; adding hydrogens is ComplexProtonation's job, not this one's
@@ -105,9 +109,11 @@ class TestComplexProtonationTransformation:
     def test_adds_hydrogens_to_both_protein_and_ligand(self) -> None:
         complex_ = _tyk2_complex()
 
-        protonated = ComplexProtonationTransformation(ComplexProtonationTransformationConfig(ph=7.0)).transform(
-            [complex_]
-        )[0]
+        protonated = (
+            ComplexProtonationTransformation(ComplexProtonationTransformationConfig(ph=7.0))
+            .transform(StructureSeries([complex_]))
+            .series[0]
+        )
 
         universe = protonated.to_mda_universe()
         assert len(universe.select_atoms("protein and element H")) > 0

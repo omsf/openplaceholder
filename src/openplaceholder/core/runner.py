@@ -1,10 +1,17 @@
 import logging
+from typing import cast
 
 from gufe import AlchemicalNetwork
 
-from openplaceholder.core.generation.generator import ArtifactBundle
+from openplaceholder.core.assembly.mapper import Mapper
+from openplaceholder.core.assembly.transformation import Transformation
+from openplaceholder.core.generation.generator import (
+    StructureGenerator,
+)
 from openplaceholder.core.pipeline import Pipeline
-from openplaceholder.core.structure import StructureSet
+from openplaceholder.core.selection.selector import Selector
+from openplaceholder.core.selection.validator import Validator
+from openplaceholder.core.structure import Structure, StructureSet
 
 logger = logging.getLogger(__name__)
 
@@ -15,39 +22,31 @@ def run_serial(pipeline: Pipeline) -> AlchemicalNetwork:
     This differs from an iterative approach in that a pipeline must
     have all types validated during construction.
     """
-    generator = pipeline.generator
-    selector = pipeline.selector
-    mapper = pipeline.mapping
-    transformations = pipeline.transformations
 
-    structure_sets: list[StructureSet] = []
+    # payload_result_db: dict[str, tuple[Payload, Any]] = {}
+    # task_db = OPHTaskStatusDB.from_filename(Path("my_db.db"), overwrite=True)
 
-    logger.info("Generating structures")
-    artifacts: ArtifactBundle = generator.run()
+    def _apply_validator(data: list[StructureSet], validator: Validator) -> list[StructureSet]:
+        new = []
+        for artifact in data:
+            validated_structures = validator.validate_structures(artifact.structures)
+            new.append(StructureSet.from_structures(validated_structures))
+        return new
 
-    for artifact in artifacts.artifacts:
-        structures: StructureSet = artifact
-
-        logger.info(f"Performing validation for {artifact.ligand_name}")
-
-        for validator in pipeline.validators:
-            logger.info("applying validator: %s", validator.__class__.__name__)
-            structures = validator.validate_structures(structures)
-
-        if not structures:
-            logger.warning(f"No structures for ligand {artifact.ligand_name} passed validation, dropping")
-            continue
-        structure_sets.append(StructureSet(structures))
-
-    # selector.select optimizes jointly across all ligands' candidate sets
-    # (e.g. cross-ligand pairwise objectives), so it's called once on the
-    # full collection rather than per-ligand.
-    selected_structures = selector.select(structure_sets)
-
-    logger.info("applying transformations")
-    for transformation in transformations:
-        logger.info("applying transformation: %s", transformation.__class__.__name__)
-        selected_structures = transformation.transform(selected_structures)
-
-    # TODO: technically not the last step, but will leave this here for now
-    return mapper.map(selected_structures)
+    data = None
+    for plugin in pipeline:
+        match plugin:
+            case StructureGenerator():
+                logger.info("Generating structures")
+                data = plugin.run()
+            case Validator():
+                logger.info("applying validator: %s", plugin.__class__.__name__)
+                data = _apply_validator(data, plugin)  # type: ignore
+            case Selector():
+                data = plugin.select(cast(list[StructureSet], data))  # type: ignore
+            case Transformation():
+                logger.info("applying transformation: %s", plugin.__class__.__name__)
+                data = plugin.transform(cast(list[Structure], data))  # type: ignore
+            case Mapper():
+                data = plugin.map(data)  # type: ignore
+    return data

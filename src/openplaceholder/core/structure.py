@@ -124,7 +124,7 @@ class StructureFormat(StrEnum):
                 raise UnsupportedFormatError(f"Unsupported structure suffix: '{suffix}'")
 
 
-class Structure(GufeTokenizable):
+class Structure(GufeTokenizable):  # type: ignore
 
     def __init__(
         self, sequence: str, ligand_smiles: str, ligand_name: str, structure_format: str, structure_data: str
@@ -134,7 +134,6 @@ class Structure(GufeTokenizable):
         self.ligand_name = ligand_name
         self.structure_format = StructureFormat(structure_format.upper()).value
         self.structure_data = structure_data
-        super().__init__()
 
     @classmethod
     def _defaults(cls) -> dict[Any, Any]:
@@ -160,8 +159,11 @@ class Structure(GufeTokenizable):
         return cls(**dct)
 
     def same_complex(self, other: Self) -> bool:
-        _ = other
-        raise NotImplementedError
+        return (
+            self.sequence == other.sequence
+            and self.ligand_name == other.ligand_name
+            and self.ligand_smiles == other.ligand_smiles
+        )
 
     def decode_structure_data(self) -> bytes:
         return base64.b64decode(self.structure_data.encode("utf-8"))
@@ -306,20 +308,50 @@ class Structure(GufeTokenizable):
         the write-side mirror of :meth:`to_mda_universe`.
         """
         block = atoms_to_pdb_string(atoms)
-        return self.copy_with_replacements(
+        return self.copy_with_replacements(  # type: ignore
             structure_format=StructureFormat.PDB,
             structure_data=base64.b64encode(block.encode()).decode(),
         )
 
 
-class StructureSet(GufeTokenizable):
-    """A list of Structure instances with convenience methods for serialization."""
+class StructureReplicates(GufeTokenizable):  # type: ignore
+    """Collection of structures representing the same complex."""
 
-    def __init__(self, structures: list[Structure]) -> None:
-        self.structures = list(sorted(structures, key=lambda s: s.key))
+    def __init__(self, replicates: list[Structure]):
+        self.replicates = replicates
+
+        if len(self.replicates) == 0:
+            # TODO: error message
+            raise ValueError()
+
+        if not self._all_shared_complex():
+            # TODO: error message
+            raise ValueError
+
+        self.ligand_name = self.replicates[0].ligand_name
+        self.ligand_smiles = self.replicates[0].ligand_smiles
+        self.sequence = self.replicates[0].sequence
+
+    def iter_replicates(self) -> Iterator[Structure]:
+        yield from self.replicates
+
+    def _all_shared_complex(self) -> bool:
+        """All replicates must share the same ligand name, ligand smiles, and sequence."""
+        first = self.replicates[0]
+        return all([first.same_complex(s) for s in self.replicates[1:]])
 
     def _to_dict(self) -> dict[Any, Any]:
-        return {"structures": self.structures}
+        return {"replicates": self.replicates}
+
+    def same_complex(self, other: Self) -> bool:
+        return (
+            self.ligand_name == other.ligand_name
+            and self.ligand_smiles == other.ligand_smiles
+            and self.sequence == other.sequence
+        )
+
+    def __len__(self) -> int:
+        return len(self.replicates)
 
     @classmethod
     def _from_dict(cls, dct: dict[Any, Any]) -> Self:
@@ -327,13 +359,85 @@ class StructureSet(GufeTokenizable):
 
     @classmethod
     def _defaults(cls) -> dict[Any, Any]:
-        return {"structures": tuple()}
+        return {}
+
+
+class StructureSet(GufeTokenizable):  # type: ignore
+    """Collection of StructureReplicates representing a congeneric series."""
+
+    def __init__(self, replicate_sets: list[StructureReplicates]):
+        self.replicate_sets = replicate_sets
+
+        if len(self.replicate_sets) == 0:
+            # TODO: error message
+            raise ValueError
+
+        if self._repeated_complexes():
+            # TODO: error message
+            raise ValueError()
+
+    def iter_replicates(self) -> Iterator[StructureReplicates]:
+        yield from self.replicate_sets
+
+    def _repeated_complexes(self) -> bool:
+        first = self.replicate_sets[0]
+        return any([first.same_complex(s) for s in self.replicate_sets[1:]])
+
+    def _to_dict(self) -> dict[Any, Any]:
+        return {
+            "replicate_sets": self.replicate_sets,
+        }
+
+    @classmethod
+    def _from_dict(cls, dct: dict[Any, Any]) -> Self:
+        return cls(**dct)
+
+    @classmethod
+    def _defaults(cls) -> dict[Any, Any]:
+        return {}
+
+    @classmethod
+    def from_structures(cls, structures: list[list[Structure]]) -> Self:
+        groups = []
+        for complex_group in structures:
+            groups.append(StructureReplicates([r for r in complex_group]))
+        return cls(groups)
 
     def __len__(self) -> int:
-        return len(self.structures)
+        return len(self.replicate_sets)
 
-    def __iter__(self) -> Iterator[Structure]:
-        yield from self.structures
 
-    def __getitem__(self, key: int) -> Structure:
-        return self.structures[key]
+class StructureSeries(GufeTokenizable):  # type: ignore
+    """Collection of structures representing a congeneric series."""
+
+    def __init__(self, series: list[Structure]):
+        self.series = series
+        if not self._no_shared_complex():
+            # TODO: error message
+            raise ValueError
+
+    def _no_shared_complex(self) -> bool:
+        seen = set()
+        for s in self.iter_series():
+            key = (s.sequence, s.ligand_name, s.ligand_smiles)
+            if key in seen:
+                return False
+            seen.add(key)
+        return True
+
+    def iter_series(self) -> Iterator[Structure]:
+        yield from self.series
+
+    def _to_dict(self) -> dict[Any, Any]:
+        return {"series": self.series}
+
+    @classmethod
+    def _from_dict(cls, dct: dict[Any, Any]) -> Self:
+        return cls(**dct)
+
+    def __len__(self) -> int:
+        return len(self.series)
+
+    @classmethod
+    def _defaults(cls) -> dict[Any, Any]:
+        return {}

@@ -1,27 +1,22 @@
 """Command line interface for openplaceholder."""
 
-import json
 import logging
 from enum import IntEnum, auto
 from json import JSONDecodeError
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import click
 from gufe import AlchemicalNetwork
 from gufe.tokenization import GufeTokenizable
 
+from openplaceholder.core.assembly.mapper import Mapper
+from openplaceholder.core.assembly.transformation import Transformation
 from openplaceholder.core.diagnostics import alchemicalnetwork_to_ligands_sdf
-from openplaceholder.core.generation.generator import (
-    ArtifactBundle,
-)
+from openplaceholder.core.generation.generator import StructureGenerator
 from openplaceholder.core.resolver import _build_plugin, load_toml
+from openplaceholder.core.selection.selector import Selector
 from openplaceholder.core.selection.validator import Validator
-from openplaceholder.core.serialization import (
-    OPHEncoder,
-    from_json,
-)
-from openplaceholder.core.structure import StructureSet
 
 
 class Stage(IntEnum):
@@ -124,7 +119,7 @@ def run(config: Path, begin: str | None, end: str | None, input: Path | None, ou
     data = None
     if input is not None:
         try:
-            data = from_json(input.read_text())
+            data = GufeTokenizable.from_json(content=input.read_text())
         except JSONDecodeError:
             raise SystemExit(f"'{input}' unable to be parsed as JSON.")
 
@@ -158,31 +153,22 @@ def run(config: Path, begin: str | None, end: str | None, input: Path | None, ou
             stage_plugins = [(Stage(i), _build_plugin(node))]
         plugins.extend(stage_plugins)
 
-    def _apply_validator(data: ArtifactBundle, validator: Validator) -> list[StructureSet]:
-        new = []
-        for artifact in data:
-            validated_structures = validator.validate_structures(artifact)
-            new.append(StructureSet(validated_structures))
-        return new
-
-    for stage_type, plugin in plugins:
-        match stage_type:
-            case Stage.GENERATOR:
+    for plugin in plugins:
+        match plugin:
+            case StructureGenerator():
                 data = plugin.run()
-            case Stage.VALIDATOR:
-                data = _apply_validator(cast(ArtifactBundle, data), plugin)
-            case Stage.SELECTOR:
+            case Validator():
+                data = plugin.validate_structures(data)
+            case Selector():
                 data = plugin.select(data)
-            case Stage.TRANSFORMATION:
+            case Transformation():
                 data = plugin.transform(data)
-            case Stage.MAPPER:
+            case Mapper():
                 data = plugin.map(data)
+            case _:
+                raise NotImplementedError
 
-    match data:
-        case GufeTokenizable():
-            output.write_text(cast(str, data.to_json()))
-        case _:
-            output.write_text(json.dumps(data, cls=OPHEncoder))
+    output.write_text(data.to_json())  # type: ignore
 
 
 @cli.group()

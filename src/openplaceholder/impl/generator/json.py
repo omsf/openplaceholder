@@ -3,10 +3,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from openplaceholder.core.generation.generator import (
-    ArtifactBundle,
     StructureGenerator,
     StructureGeneratorConfigBase,
 )
+from openplaceholder.core.structure import StructureSet
 from openplaceholder.impl.generator.archiver import (
     JSONArchiver,
     JSONArchiverConfig,
@@ -27,7 +27,7 @@ class JSONGenerator(StructureGenerator):
     def _setup(self) -> None:
         self._archiver: JSONArchiver = JSONArchiver(JSONArchiverConfig(path=self._config.path))
 
-    def _run(self) -> ArtifactBundle:
+    def _run(self) -> StructureSet:
         logger.debug("deferring to JSONArchiver for artifact generation")
         return self._archiver.read()
 

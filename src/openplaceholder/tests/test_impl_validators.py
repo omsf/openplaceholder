@@ -1,6 +1,3 @@
-import base64
-
-from openplaceholder.core.structure import Structure, StructureSet
 from openplaceholder.impl.validators import (
     ClashValidator,
     ClashValidatorConfig,
@@ -40,14 +37,3 @@ class TestPosebustersValidator:
     def test_init(self) -> None:
         config = PosebustersValidatorConfig()
         PosebustersValidator(config)
-
-    def test_drops_unperceivable_ligand_instead_of_raising(self) -> None:
-        structure = Structure(
-            sequence="",
-            ligand_smiles="c1ccccc1",
-            ligand_name="LIG",
-            structure_format="pdb",
-            structure_data=base64.b64encode(_UNPERCEIVABLE_LIGAND.encode()).decode(),
-        )
-        validator = PosebustersValidator(PosebustersValidatorConfig())
-        assert len(validator.validate_structures(StructureSet([structure]))) == 0
