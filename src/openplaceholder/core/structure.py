@@ -362,7 +362,9 @@ class StructureReplicates(GufeTokenizable):  # type: ignore
     def _defaults(cls) -> dict[Any, Any]:
         return {}
 
+
 class EmptyStructureSetError(Exception): ...
+
 
 class StructureSet(GufeTokenizable):  # type: ignore
     """Collection of StructureReplicates representing a congeneric series."""
@@ -408,6 +410,7 @@ class StructureSet(GufeTokenizable):  # type: ignore
 
 
 class EmptyStructureSeriesError(Exception): ...
+
 
 class StructureSeries(GufeTokenizable):  # type: ignore
     """Collection of structures representing a congeneric series."""

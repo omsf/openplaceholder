@@ -14,7 +14,7 @@ from openplaceholder.core.assembly.mapper import Mapper
 from openplaceholder.core.assembly.transformation import Transformation
 from openplaceholder.core.diagnostics import alchemicalnetwork_to_ligands_sdf
 from openplaceholder.core.generation.generator import StructureGenerator
-from openplaceholder.core.resolver import _build_plugin, load_toml
+from openplaceholder.core.loader import _build_plugin, load_toml
 from openplaceholder.core.selection.selector import Selector
 from openplaceholder.core.selection.validator import Validator
 
