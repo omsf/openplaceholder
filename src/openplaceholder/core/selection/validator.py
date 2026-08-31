@@ -29,6 +29,7 @@ class Validator(Module, ABC):
                     )
                 )
             except EmptyReplicateError:
+                logger.warning(f"No valid structures found for: {outer.ligand_name}")
                 continue
         return StructureSet(_structures)
 

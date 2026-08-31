@@ -41,4 +41,6 @@ def run_serial(pipeline: Pipeline, initial_data: Any) -> AlchemicalNetwork:
                 data = plugin.transform(data)
             case Mapper():
                 data = plugin.map(data)
+            case _:
+                raise TypeError(f"Unrecognized module {plugin}")
     return data

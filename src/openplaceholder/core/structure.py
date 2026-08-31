@@ -382,8 +382,10 @@ class StructureSet(GufeTokenizable):  # type: ignore
         yield from self.replicate_sets
 
     def _repeated_complexes(self) -> bool:
-        first = self.replicate_sets[0]
-        return any([first.same_complex(s) for s in self.replicate_sets[1:]])
+        seen = set()
+        for s in self.replicate_sets:
+            seen.add((s.sequence, s.ligand_name, s.ligand_smiles))
+        return len(seen) != len(self.replicate_sets)
 
     def _to_dict(self) -> dict[Any, Any]:
         return {
