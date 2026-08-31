@@ -3,7 +3,12 @@ from abc import ABC, abstractmethod
 
 from openplaceholder.core.configuration import ConfigBase
 from openplaceholder.core.interface import Module
-from openplaceholder.core.structure import Structure, StructureSet
+from openplaceholder.core.structure import (
+    EmptyReplicateError,
+    Structure,
+    StructureReplicates,
+    StructureSet,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -17,10 +22,15 @@ class Validator(Module, ABC):
         logger.info("validating structures with %s", self.__class__.__name__)
         _structures = []
         for outer in structures.iter_replicates():
-            _structures.append(
-                [structure for structure in outer.iter_replicates() if self._validate_structure(structure)]
-            )
-        return StructureSet.from_structures(_structures)
+            try:
+                _structures.append(
+                    StructureReplicates(
+                        [structure for structure in outer.iter_replicates() if self._validate_structure(structure)]
+                    )
+                )
+            except EmptyReplicateError:
+                continue
+        return StructureSet(_structures)
 
     @abstractmethod
     def _validate_structure(self, structure: Structure) -> bool:

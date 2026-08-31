@@ -314,6 +314,9 @@ class Structure(GufeTokenizable):  # type: ignore
         )
 
 
+class EmptyReplicateError(Exception): ...
+
+
 class StructureReplicates(GufeTokenizable):  # type: ignore
     """Collection of structures representing the same complex."""
 
