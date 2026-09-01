@@ -1,4 +1,5 @@
 """Command line interface for openplaceholder."""
+from openplaceholder.core.pipeline import Stage
 
 import logging
 from enum import IntEnum, auto
@@ -17,14 +18,6 @@ from openplaceholder.core.generation.generator import StructureGenerator
 from openplaceholder.core.loader import _build_plugin, load_toml
 from openplaceholder.core.selection.selector import Selector
 from openplaceholder.core.selection.validator import Validator
-
-
-class Stage(IntEnum):
-    GENERATOR = auto()
-    VALIDATOR = auto()
-    SELECTOR = auto()
-    TRANSFORMATION = auto()
-    MAPPER = auto()
 
 
 STAGE_CHOICES = tuple(name.lower() for name in Stage.__members__)
