@@ -426,7 +426,7 @@ class StructureSet(GufeTokenizable):  # type: ignore
         for s in self.replicate_sets:
             key = (s.sequence, s.ligand_name, s.ligand_smiles)
             if key in seen:
-                raise True
+                return True
             seen.add(key)
         return False
 

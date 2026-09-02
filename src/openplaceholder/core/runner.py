@@ -25,7 +25,7 @@ def run_serial(pipeline: Pipeline, initial_data: Any) -> GufeTokenizable:
     ----------
     pipeline
         The pipeline to be run.
-    intial_data
+    initial_data
         Input data to the first module. This depends on the type of module.
 
     Raises
