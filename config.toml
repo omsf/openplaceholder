@@ -38,6 +38,10 @@ implementation = "openplaceholder.impl.validators:PosebustersValidator"
 [[selection.validators]]
 implementation = "openplaceholder.impl.validators:StereoValidator"
 
+[[selection.normalizers]]
+implementation = "openplaceholder.impl.normalizers:BindingSiteAligner"
+radius = 6.0
+
 [selection.selector]
 implementation = "openplaceholder.impl.selector.mpo:MPOSelector"
 

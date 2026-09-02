@@ -57,6 +57,7 @@ def resolve_pipeline(data: dict[str, Any]) -> Pipeline:
 
     selection_table = data["selection"]
     validators = [_build_plugin(v) for v in selection_table.get("validators", [])]
+    normalizers = [_build_plugin(n) for n in selection_table.get("normalizers", [])]
     selector = _build_plugin(selection_table.get("selector"))
 
     assembly = data["assembly"]
@@ -67,6 +68,7 @@ def resolve_pipeline(data: dict[str, Any]) -> Pipeline:
     return Pipeline(
         generator=generator,
         validators=validators,
+        normalizers=normalizers,
         selector=selector,
         transformations=transformations,
         mapping=mapping,
