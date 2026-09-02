@@ -7,6 +7,9 @@ from openplaceholder.core.loader import _build_plugin
 
 
 class Stage(IntEnum):
+    """An interger enumeration of Stages, provided an explicit
+    ordering to their execution.
+    """
     GENERATOR = auto()
     VALIDATOR = auto()
     SELECTOR = auto()
@@ -14,6 +17,9 @@ class Stage(IntEnum):
     MAPPER = auto()
 
 
+# Each stage, where to find its configuration based on keys, and
+# whether there can be multiple instances of that stage inside the
+# config
 CONFIG_PLUGIN_MAP: dict[Stage, tuple[tuple[str, ...], bool]] = {
     Stage.GENERATOR: (("generation", "generator"), False),
     Stage.VALIDATOR: (("selection", "validators"), True),
@@ -23,7 +29,11 @@ CONFIG_PLUGIN_MAP: dict[Stage, tuple[tuple[str, ...], bool]] = {
 }
 
 
-class PipelineResolutionError(Exception): ...
+class PipelineResolutionError(Exception):
+    """To be raised when a pipeline cannot be resolved from a
+    configuration mapping.
+    """
+    ...
 
 
 @dataclass(frozen=True)

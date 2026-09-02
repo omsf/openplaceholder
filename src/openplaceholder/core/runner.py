@@ -18,8 +18,20 @@ logger = logging.getLogger(__name__)
 def run_serial(pipeline: Pipeline, initial_data: Any) -> GufeTokenizable:
     """Naive and simple implementation for running a pipeline.
 
-    This differs from an iterative approach in that a pipeline must
-    have all types validated during construction.
+    This runs a Pipeline through all of its modules, using initial
+    data as the first module's input.
+
+    Parameters
+    ----------
+    pipeline
+        The pipeline to be run.
+    intial_data
+        Input data to the first module. This depends on the type of module.
+
+    Raises
+    ------
+    TypeError
+        When an unrecognized type is found in the pipeline.
     """
 
     data = initial_data

@@ -129,6 +129,21 @@ class Structure(GufeTokenizable):  # type: ignore
     def __init__(
         self, sequence: str, ligand_smiles: str, ligand_name: str, structure_format: str, structure_data: str
     ) -> None:
+        """Initialize a new Structure instance.
+
+        Parameters
+        ----------
+        sequence
+            The protein sequence the structure represents.
+        ligand_smiles
+            The smiles string of the bound ligand.
+        ligand_name
+            The name of the ligand.
+        structure_format
+            The format of the included structure data. See the StructureFormat enum.
+        structure_data
+            The base64 encoded bytes of the structure file.
+        """
         self.sequence = sequence
         self.ligand_smiles = ligand_smiles
         self.ligand_name = ligand_name
@@ -314,20 +329,33 @@ class Structure(GufeTokenizable):  # type: ignore
         )
 
 
-class EmptyReplicateError(Exception): ...
+class EmptyReplicatesError(Exception):
+    """To be raised when a StructureReplicates instance is initialized without any structures."""
 
 
 class StructureReplicates(GufeTokenizable):  # type: ignore
     """Collection of structures representing the same complex."""
 
     def __init__(self, replicates: list[Structure]):
+        """Initialize a StructureReplicates instance.
+
+        Parameters
+        ----------
+        replicates
+            A non-empty list of Structures that represent the same complex.
+
+        Raises
+        ------
+        EmptyReplicatesError
+            When replicates is provided with a non-empty list.
+        """
         self.replicates = replicates
 
         if len(self.replicates) == 0:
-            raise EmptyReplicateError("StructureReplicate cannot be empty")
+            raise EmptyReplicatesError("StructureReplicates cannot be empty")
 
         if not self._all_shared_complex():
-            raise ValueError("StructureReplicate can only contain structures representing the same complex")
+            raise ValueError("StructureReplicates can only contain structures representing the same complex")
 
         self.ligand_name = self.replicates[0].ligand_name
         self.ligand_smiles = self.replicates[0].ligand_smiles
@@ -370,22 +398,37 @@ class StructureSet(GufeTokenizable):  # type: ignore
     """Collection of StructureReplicates representing a congeneric series."""
 
     def __init__(self, replicate_sets: list[StructureReplicates]):
+        """Initialize a StructureSet instance.
+
+        Parameters
+        ----------
+        replicate_sets
+            A non-empty list of StructureReplicates.
+
+        Raises
+        ------
+        EmptyStructureSetError
+            When an empty list is provided for replicate_sets.
+        """
         self.replicate_sets = replicate_sets
 
         if len(self.replicate_sets) == 0:
             raise EmptyStructureSetError("StructureSet cannot be empty")
 
-        if self._repeated_complexes():
-            raise ValueError("StructureSet can not contain multiple replicates representing the same complex")
+        if self._has_repeated_complexes():
+            raise ValueError("StructureSet can not contain multiple StructureReplicates representing the same complex")
 
     def iter_replicates(self) -> Iterator[StructureReplicates]:
         yield from self.replicate_sets
 
-    def _repeated_complexes(self) -> bool:
+    def _has_repeated_complexes(self) -> bool:
         seen = set()
         for s in self.replicate_sets:
-            seen.add((s.sequence, s.ligand_name, s.ligand_smiles))
-        return len(seen) != len(self.replicate_sets)
+            key = (s.sequence, s.ligand_name, s.ligand_smiles)
+            if key in seen:
+                raise True
+            seen.add(key)
+        return False
 
     def _to_dict(self) -> dict[Any, Any]:
         return {
@@ -418,10 +461,22 @@ class StructureSeries(GufeTokenizable):  # type: ignore
     """Collection of structures representing a congeneric series."""
 
     def __init__(self, series: list[Structure]):
+        """Initialize a StructureSeries instance.
+
+        Parameters
+        ----------
+        series
+            A non-empty list of Structure instances.
+
+        Raises
+        ------
+        EmptyStructureSeriesError
+            When an empty list is provided for series.
+        """
         self.series = series
 
         if len(self.series) == 0:
-            raise EmptyStructureSeriesError("StructureReplicate cannot be empty")
+            raise EmptyStructureSeriesError("StructureSeries cannot be empty")
 
         if not self._no_shared_complex():
             raise ValueError("StructureSeries can not contain multiple structures representing the same complex")
