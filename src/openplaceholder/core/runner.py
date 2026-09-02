@@ -15,6 +15,7 @@ def run_serial(pipeline: Pipeline) -> AlchemicalNetwork:
     have all types validated during construction.
     """
     generator = pipeline.generator
+    normalizers = pipeline.normalizers
     selector = pipeline.selector
     mapper = pipeline.mapping
     transformations = pipeline.transformations
@@ -37,6 +38,12 @@ def run_serial(pipeline: Pipeline) -> AlchemicalNetwork:
             logger.warning(f"No structures for ligand {artifact.ligand_name} passed validation, dropping")
             continue
         structure_sets.append(StructureSet.from_structures(structures))
+
+    # normalization runs so that selector can compare more easily across complexes
+    logger.info("applying normalizers")
+    for normalizer in normalizers:
+        logger.info("applying normalizer: %s", normalizer.__class__.__name__)
+        structure_sets = normalizer.normalize(structure_sets)
 
     # selector.select optimizes jointly across all ligands' candidate sets
     # (e.g. cross-ligand pairwise objectives), so it's called once on the

@@ -27,6 +27,7 @@ from openplaceholder.core.structure import StructureSet
 class Stage(IntEnum):
     GENERATOR = auto()
     VALIDATOR = auto()
+    NORMALIZER = auto()
     SELECTOR = auto()
     TRANSFORMATION = auto()
     MAPPER = auto()
@@ -141,6 +142,7 @@ def run(config: Path, begin: str | None, end: str | None, input: Path | None, ou
     config_plugin_map: dict[Stage, tuple[tuple[str, ...], bool]] = {
         Stage.GENERATOR: (("generation", "generator"), False),
         Stage.VALIDATOR: (("selection", "validators"), True),
+        Stage.NORMALIZER: (("selection", "normalizers"), True),
         Stage.SELECTOR: (("selection", "selector"), False),
         Stage.TRANSFORMATION: (("assembly", "transformations"), True),
         Stage.MAPPER: (("assembly", "mapping"), False),
@@ -171,6 +173,8 @@ def run(config: Path, begin: str | None, end: str | None, input: Path | None, ou
                 data = plugin.run()
             case Stage.VALIDATOR:
                 data = _apply_validator(cast(list[StructureGeneratorArtifact], data), plugin)
+            case Stage.NORMALIZER:
+                data = plugin.normalize(data)
             case Stage.SELECTOR:
                 data = plugin.select(data)
             case Stage.TRANSFORMATION:
