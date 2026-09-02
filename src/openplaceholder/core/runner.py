@@ -1,7 +1,7 @@
 import logging
 from typing import Any
 
-from gufe import AlchemicalNetwork
+from gufe.tokenization import GufeTokenizable
 
 from openplaceholder.core.assembly.mapper import Mapper
 from openplaceholder.core.assembly.transformation import Transformation
@@ -15,15 +15,12 @@ from openplaceholder.core.selection.validator import Validator
 logger = logging.getLogger(__name__)
 
 
-def run_serial(pipeline: Pipeline, initial_data: Any) -> AlchemicalNetwork:
+def run_serial(pipeline: Pipeline, initial_data: Any) -> GufeTokenizable:
     """Naive and simple implementation for running a pipeline.
 
     This differs from an iterative approach in that a pipeline must
     have all types validated during construction.
     """
-
-    # payload_result_db: dict[str, tuple[Payload, Any]] = {}
-    # task_db = OPHTaskStatusDB.from_filename(Path("my_db.db"), overwrite=True)
 
     data = initial_data
     for plugin in pipeline:

@@ -1,8 +1,6 @@
 """Command line interface for openplaceholder."""
-from openplaceholder.core.pipeline import Stage
 
 import logging
-from enum import IntEnum, auto
 from json import JSONDecodeError
 from pathlib import Path
 from typing import Any
@@ -11,14 +9,10 @@ import click
 from gufe import AlchemicalNetwork
 from gufe.tokenization import GufeTokenizable
 
-from openplaceholder.core.assembly.mapper import Mapper
-from openplaceholder.core.assembly.transformation import Transformation
 from openplaceholder.core.diagnostics import alchemicalnetwork_to_ligands_sdf
-from openplaceholder.core.generation.generator import StructureGenerator
-from openplaceholder.core.loader import _build_plugin, load_toml
-from openplaceholder.core.selection.selector import Selector
-from openplaceholder.core.selection.validator import Validator
-
+from openplaceholder.core.loader import load_toml
+from openplaceholder.core.pipeline import Pipeline, Stage
+from openplaceholder.core.runner import run_serial
 
 STAGE_CHOICES = tuple(name.lower() for name in Stage.__members__)
 
@@ -118,50 +112,9 @@ def run(config: Path, begin: str | None, end: str | None, input: Path | None, ou
 
     config_map = load_toml(config)
 
-    def _resolve(path_parts: tuple[str, ...]) -> Any:
-        node = config_map
-        for key in path_parts:
-            if not isinstance(node, dict) or key not in node:
-                raise SystemExit(f"Missing required config key: {'.'.join(path_parts)}")
-            node = node[key]
-        return node
-
-    config_plugin_map: dict[Stage, tuple[tuple[str, ...], bool]] = {
-        Stage.GENERATOR: (("generation", "generator"), False),
-        Stage.VALIDATOR: (("selection", "validators"), True),
-        Stage.SELECTOR: (("selection", "selector"), False),
-        Stage.TRANSFORMATION: (("assembly", "transformations"), True),
-        Stage.MAPPER: (("assembly", "mapping"), False),
-    }
-
-    plugins = []
-    for i in range(first, last + 1):
-        path, expect_list = config_plugin_map[Stage(i)]
-        node = _resolve(path)
-        if expect_list:
-            if not isinstance(node, list):
-                raise SystemExit(f"'config['{':'.join(path)}'] must be a TOML array of tables")
-            stage_plugins = [(Stage(i), _build_plugin(val)) for val in node]
-        else:
-            stage_plugins = [(Stage(i), _build_plugin(node))]
-        plugins.extend(stage_plugins)
-
-    for plugin in plugins:
-        match plugin:
-            case StructureGenerator():
-                data = plugin.run()
-            case Validator():
-                data = plugin.validate_structures(data)
-            case Selector():
-                data = plugin.select(data)
-            case Transformation():
-                data = plugin.transform(data)
-            case Mapper():
-                data = plugin.map(data)
-            case _:
-                raise NotImplementedError
-
-    output.write_text(data.to_json())  # type: ignore
+    pipeline = Pipeline.from_config_map(config_map)
+    result: GufeTokenizable = run_serial(pipeline, data)
+    result.to_json(output)
 
 
 @cli.group()
