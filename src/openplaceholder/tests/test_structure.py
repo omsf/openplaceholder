@@ -1,17 +1,13 @@
 import base64
-import tempfile
-from pathlib import Path
 
 import MDAnalysis as mda
 import pytest
 from rdkit import Chem
 from rdkit.Chem.rdDistGeom import EmbedMolecule
 
-from openplaceholder.core.serialization import from_json, to_json
 from openplaceholder.core.structure import (
     Structure,
     StructureFormat,
-    StructureSet,
     UnsupportedFormatError,
 )
 from openplaceholder.tests.datafiles import TYK2_LIG_PDB
@@ -87,12 +83,12 @@ class TestStructure:
     def test_key_equal_structures(self) -> None:
         a = Structure("SEQ", BENZENE_SMILES, "lig", "pdb", "data")
         b = Structure("SEQ", BENZENE_SMILES, "lig", "pdb", "data")
-        assert a.key() == b.key()
+        assert a.key == b.key
 
     def test_key_different_structures(self) -> None:
         a = Structure("SEQ", BENZENE_SMILES, "lig", "pdb", "data")
         b = Structure("SEQ", BENZENE_SMILES, "lig", "pdb", "different_data")
-        assert a.key() != b.key()
+        assert a.key != b.key
 
     def test_to_mda_universe(self) -> None:
         test_file = str(TYK2_LIG_PDB)
@@ -142,35 +138,5 @@ class TestStructure:
 @pytest.fixture
 def structures() -> list[Structure]:
     structures = make_structures(n_structures=25, ligand_name="benzene")
-    structures += make_structures(n_structures=25, ligand_name="phenol", ligand_smiles=PHENOL_SMILES)
+    structures = structures + make_structures(n_structures=25, ligand_name="phenol", ligand_smiles=PHENOL_SMILES)
     return structures
-
-
-class TestStructureSet:
-
-    def test_from_structures(self, structures: list[Structure]) -> None:
-        ss_one_to_one = StructureSet.from_structures(structures)
-        assert len(ss_one_to_one) == len(structures)
-
-        ss_doubled_input = StructureSet.from_structures(structures + structures)
-        assert len(ss_doubled_input) == len(structures)
-
-    def test_write(self, structures: list[Structure]) -> None:
-        ss = StructureSet.from_structures(structures)
-        with tempfile.TemporaryDirectory() as tmpdir:
-            path = Path(tmpdir) / "structures.json"
-            ss.write(path)
-            assert path.exists()
-            path.write_text(to_json(ss))
-            content = from_json(path.read_text())
-            assert content.structures == ss.structures
-
-    def test_from_file(self, structures: list[Structure]) -> None:
-        ss = StructureSet.from_structures(structures)
-        with tempfile.TemporaryDirectory() as tmpdir:
-            path = Path(tmpdir) / "structures.json"
-            ss.write(path)
-            loaded = StructureSet.from_file(path)
-            assert len(loaded) == len(structures)
-            loaded_deduped = StructureSet.from_structures(loaded.structures)
-            assert len(loaded_deduped) == len(loaded)

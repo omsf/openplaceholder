@@ -11,12 +11,13 @@ from typing import Any, cast
 
 from openplaceholder.core.generation.generator import (
     StructureGenerator,
-    StructureGeneratorArtifact,
     StructureGeneratorConfigBase,
 )
 from openplaceholder.core.structure import (
     Structure,
     StructureFormat,
+    StructureReplicates,
+    StructureSet,
     UnsupportedFormatError,
 )
 
@@ -45,8 +46,7 @@ class OpenFold3Generator(StructureGenerator):
     def _setup(self) -> None:
         pass
 
-    def _run(self) -> list[StructureGeneratorArtifact]:
-
+    def _run(self) -> StructureSet:
         logger.info("preparing input files for OpenFold3 run")
         self._prepare_openfold_inputs()
 
@@ -183,7 +183,7 @@ experiment_settings:
             context += f"\n\n{error_log} (last {len(tail)} lines):\n" + "\n".join(tail)
         return context
 
-    def _package_outputs(self) -> list[StructureGeneratorArtifact]:
+    def _package_outputs(self) -> StructureSet:
 
         artifacts = []
 
@@ -220,9 +220,8 @@ experiment_settings:
                 )
 
                 structures.append(Structure(**structure_params))
-            artifact = StructureGeneratorArtifact.from_structures(structures)
-            artifacts.append(artifact)
-        return artifacts
+            artifacts.append(StructureReplicates(structures))
+        return StructureSet(artifacts)
 
     @staticmethod
     def _rename_ligand_residue(raw: bytes, ligand_name: str) -> bytes:

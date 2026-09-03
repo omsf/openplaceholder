@@ -9,7 +9,7 @@ import openplaceholder.impl.selector.objectives  # noqa: F401  (populate registr
 from openplaceholder.core.loader import resolve_config_type
 from openplaceholder.core.selection.objective import Objective, get_objective
 from openplaceholder.core.selection.selector import Selector, SelectorConfigBase
-from openplaceholder.core.structure import Structure, StructureSet
+from openplaceholder.core.structure import Structure, StructureSeries, StructureSet
 
 
 @dataclass(frozen=True)
@@ -69,7 +69,7 @@ class MPOSelector(Selector):
         params = {k: v for k, v in settings.items() if k != "weight"}
         return cls(config=config_type(**params))
 
-    def _select(self, structures: list[StructureSet]) -> list[Structure]:
+    def _select(self, structures: StructureSet) -> StructureSeries:
         pool, groups = self._flatten(structures)
         if len(pool) > self._MAX_POOL_SIZE_BATCHED:
             raise NotImplementedError(
@@ -80,11 +80,11 @@ class MPOSelector(Selector):
             )
         combined = self._combine(pool)
         chosen = self._optimize_batched(combined, groups)
-        return [pool[i] for i in chosen]
+        return StructureSeries([pool[i] for i in chosen])
 
     @staticmethod
     def _flatten(
-        structures: list[StructureSet],
+        structures: StructureSet,
     ) -> tuple[list[Structure], list[list[int]]]:
         """Flatten per-ligand sets into one pool plus per-ligand index groups.
 
@@ -93,9 +93,9 @@ class MPOSelector(Selector):
         """
         pool: list[Structure] = []
         groups: list[list[int]] = []
-        for structure_set in structures:
+        for complex_set in structures.iter_replicates():
             group = []
-            for structure in structure_set.structures:
+            for structure in complex_set.iter_replicates():
                 group.append(len(pool))
                 pool.append(structure)
             groups.append(group)

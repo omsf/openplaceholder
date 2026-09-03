@@ -1,7 +1,8 @@
 import tempfile
 from pathlib import Path
 
-from openplaceholder.core.resolver import load_toml, resolve_pipeline
+from openplaceholder.core.loader import load_toml
+from openplaceholder.core.pipeline import Pipeline
 from openplaceholder.impl.generator.openfold3 import (
     OpenFold3Generator,
     OpenFold3GeneratorConfig,
@@ -57,26 +58,24 @@ class TestResolvePipeline:
             config_path = Path(tmpdir) / "config.toml"
             config_path.write_text(CONFIG_TEMPLATE.format(generator_directory=tmpdir))
 
-            pipeline = resolve_pipeline(load_toml(config_path))
+            pipeline = Pipeline.from_config_map(load_toml(config_path))
 
-            generator = pipeline.generator
+            generator = pipeline.plugins[0]
             assert isinstance(generator, OpenFold3Generator)
             assert isinstance(generator._config, OpenFold3GeneratorConfig)
             assert generator._config.sequence == "MGS"
             assert generator._config.ligands == {"lig_a": "C1=CC=CC=C1"}
 
-            assert len(pipeline.validators) == 1
-            assert isinstance(pipeline.validators[0], PosebustersValidator)
+            assert isinstance(pipeline.plugins[1], PosebustersValidator)
 
-            selector = pipeline.selector
+            selector = pipeline.plugins[2]
             assert isinstance(selector, MPOSelector)
             assert "VolumeOverlapObjective" in selector._config.objectives
 
-            assert isinstance(pipeline.transformations, list)
-            assert len(pipeline.transformations) == 3
-            assert isinstance(pipeline.transformations[0], MaxVolumeSiteSubstitutionTransformation)
-            assert isinstance(pipeline.transformations[1], HeavyAtomAdditionTransformation)
-            protonation = pipeline.transformations[2]
+            assert isinstance(pipeline.plugins[3], MaxVolumeSiteSubstitutionTransformation)
+            assert isinstance(pipeline.plugins[4], HeavyAtomAdditionTransformation)
+            protonation = pipeline.plugins[5]
             assert isinstance(protonation, ComplexProtonationTransformation)
             assert protonation._config.ph == 7.0
-            assert isinstance(pipeline.mapping, LOMAPMapper)
+
+            assert isinstance(pipeline.plugins[6], LOMAPMapper)

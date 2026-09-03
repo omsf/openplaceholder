@@ -53,5 +53,5 @@ class TestOpenFold3Generator:
 
             assert len(artifacts) == 3
 
-            for artifact in artifacts:
-                assert len(artifact.structures) == gen._config.generate_n_seeds * gen._config.n_diffusion_samples
+            for artifact in artifacts.iter_replicates():
+                assert len(artifact) == gen._config.generate_n_seeds * gen._config.n_diffusion_samples
