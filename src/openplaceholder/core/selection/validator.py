@@ -5,9 +5,10 @@ from openplaceholder.core.configuration import ConfigBase
 from openplaceholder.core.interface import Module
 from openplaceholder.core.structure import (
     EmptyReplicatesError,
+    EmptyStructureSetError,
     Structure,
     StructureReplicates,
-    StructureSet, EmptyStructureSetError,
+    StructureSet,
 )
 
 logger = logging.getLogger(__name__)

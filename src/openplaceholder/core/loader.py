@@ -10,6 +10,8 @@ from typing import Any, cast
 def load_toml(path: str | Path) -> dict[str, Any]:
     path = Path(path)
     raw = tomllib.loads(path.read_text())
+    if not isinstance(raw, dict):
+        raise ValueError(f"Expected a TOML mapping as root, got {type(raw).__name__} in {path}")
     return raw
 
 
