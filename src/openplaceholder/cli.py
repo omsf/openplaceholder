@@ -1,36 +1,18 @@
 """Command line interface for openplaceholder."""
 
-import json
 import logging
-from enum import IntEnum, auto
 from json import JSONDecodeError
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import click
 from gufe import AlchemicalNetwork
 from gufe.tokenization import GufeTokenizable
 
 from openplaceholder.core.diagnostics import alchemicalnetwork_to_ligands_sdf
-from openplaceholder.core.generation.generator import (
-    StructureGeneratorArtifact,
-)
-from openplaceholder.core.resolver import _build_plugin, load_toml
-from openplaceholder.core.selection.validator import Validator
-from openplaceholder.core.serialization import (
-    OPHEncoder,
-    from_json,
-)
-from openplaceholder.core.structure import StructureSet
-
-
-class Stage(IntEnum):
-    GENERATOR = auto()
-    VALIDATOR = auto()
-    SELECTOR = auto()
-    TRANSFORMATION = auto()
-    MAPPER = auto()
-
+from openplaceholder.core.loader import load_toml
+from openplaceholder.core.pipeline import Pipeline, Stage
+from openplaceholder.core.runner import run_serial
 
 STAGE_CHOICES = tuple(name.lower() for name in Stage.__members__)
 
@@ -124,65 +106,15 @@ def run(config: Path, begin: str | None, end: str | None, input: Path | None, ou
     data = None
     if input is not None:
         try:
-            data = from_json(input.read_text())
+            data = GufeTokenizable.from_json(content=input.read_text())
         except JSONDecodeError:
             raise SystemExit(f"'{input}' unable to be parsed as JSON.")
 
     config_map = load_toml(config)
 
-    def _resolve(path_parts: tuple[str, ...]) -> Any:
-        node = config_map
-        for key in path_parts:
-            if not isinstance(node, dict) or key not in node:
-                raise SystemExit(f"Missing required config key: {'.'.join(path_parts)}")
-            node = node[key]
-        return node
-
-    config_plugin_map: dict[Stage, tuple[tuple[str, ...], bool]] = {
-        Stage.GENERATOR: (("generation", "generator"), False),
-        Stage.VALIDATOR: (("selection", "validators"), True),
-        Stage.SELECTOR: (("selection", "selector"), False),
-        Stage.TRANSFORMATION: (("assembly", "transformations"), True),
-        Stage.MAPPER: (("assembly", "mapping"), False),
-    }
-
-    plugins = []
-    for i in range(first, last + 1):
-        path, expect_list = config_plugin_map[Stage(i)]
-        node = _resolve(path)
-        if expect_list:
-            if not isinstance(node, list):
-                raise SystemExit(f"'config['{':'.join(path)}'] must be a TOML array of tables")
-            stage_plugins = [(Stage(i), _build_plugin(val)) for val in node]
-        else:
-            stage_plugins = [(Stage(i), _build_plugin(node))]
-        plugins.extend(stage_plugins)
-
-    def _apply_validator(data: list[StructureGeneratorArtifact], validator: Validator) -> list[StructureSet]:
-        new = []
-        for artifact in data:
-            validated_structures = validator.validate_structures(artifact.structures)
-            new.append(StructureSet.from_structures(validated_structures))
-        return new
-
-    for stage_type, plugin in plugins:
-        match stage_type:
-            case Stage.GENERATOR:
-                data = plugin.run()
-            case Stage.VALIDATOR:
-                data = _apply_validator(cast(list[StructureGeneratorArtifact], data), plugin)
-            case Stage.SELECTOR:
-                data = plugin.select(data)
-            case Stage.TRANSFORMATION:
-                data = plugin.transform(data)
-            case Stage.MAPPER:
-                data = plugin.map(data)
-
-    match data:
-        case GufeTokenizable():
-            output.write_text(cast(str, data.to_json()))
-        case _:
-            output.write_text(json.dumps(data, cls=OPHEncoder))
+    pipeline = Pipeline.from_config_map(config_map)
+    result: GufeTokenizable = run_serial(pipeline, data)
+    result.to_json(output)
 
 
 @cli.group()

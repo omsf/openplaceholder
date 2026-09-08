@@ -1,5 +1,4 @@
 import base64
-import dataclasses
 import gzip
 import random
 from pathlib import Path
@@ -27,7 +26,7 @@ def make_structures(
         structure_data="",
     )
     return [
-        dataclasses.replace(template, structure_data=base64.b64encode(random.randbytes(8)).decode())
+        template.copy_with_replacements(structure_data=base64.b64encode(random.randbytes(8)).decode())
         for _ in range(n_structures)
     ]
 

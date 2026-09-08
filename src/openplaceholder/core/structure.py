@@ -1,24 +1,20 @@
 """Structure definitions."""
 
 import base64
-import hashlib
 import io
-import json
 import logging
-from dataclasses import asdict, dataclass, fields, replace
 from enum import StrEnum
 from functools import cache
-from pathlib import Path
 from typing import Any, Iterator, Self, cast
 
 import MDAnalysis as mda
 import numpy as np
+from gufe.tokenization import GufeTokenizable
 from MDAnalysis import Universe
 from rdkit import Chem
 from rdkit.Chem import AllChem, rdDetermineBonds
 from rdkit.Geometry import Point3D
 
-from openplaceholder.core.serialization import JSONSerializable, to_shallow_dict
 from openplaceholder.core.utils import _quiet_rdkit_warnings
 
 logger = logging.getLogger(__name__)
@@ -128,24 +124,61 @@ class StructureFormat(StrEnum):
                 raise UnsupportedFormatError(f"Unsupported structure suffix: '{suffix}'")
 
 
-@dataclass(frozen=True)
-class Structure(JSONSerializable):
-    sequence: str
-    ligand_smiles: str
-    ligand_name: str
-    structure_format: str
-    structure_data: str
+class Structure(GufeTokenizable):  # type: ignore
 
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "structure_format", StructureFormat(self.structure_format.upper()).value)
+    def __init__(
+        self, sequence: str, ligand_smiles: str, ligand_name: str, structure_format: str, structure_data: str
+    ) -> None:
+        """Initialize a new Structure instance.
 
-    def key(self) -> str:
-        parts = [getattr(self, f.name) for f in fields(self)]
-        return hashlib.sha256("\x00".join(parts).encode()).hexdigest()
+        Parameters
+        ----------
+        sequence
+            The protein sequence the structure represents.
+        ligand_smiles
+            The smiles string of the bound ligand.
+        ligand_name
+            The name of the ligand.
+        structure_format
+            The format of the included structure data. See the StructureFormat enum.
+        structure_data
+            The base64 encoded bytes of the structure file.
+        """
+        self.sequence = sequence
+        self.ligand_smiles = ligand_smiles
+        self.ligand_name = ligand_name
+        self.structure_format = StructureFormat(structure_format.upper()).value
+        self.structure_data = structure_data
+
+    @classmethod
+    def _defaults(cls) -> dict[Any, Any]:
+        return {
+            "sequence": "",
+            "ligand_smiles": "",
+            "ligand_name": "",
+            "structure_format": StructureFormat.PDB,
+            "structure_data": "",
+        }
+
+    def _to_dict(self) -> dict[Any, Any]:
+        return {
+            "sequence": self.sequence,
+            "ligand_smiles": self.ligand_smiles,
+            "ligand_name": self.ligand_name,
+            "structure_format": self.structure_format,
+            "structure_data": self.structure_data,
+        }
+
+    @classmethod
+    def _from_dict(cls, dct: dict[Any, Any]) -> Self:
+        return cls(**dct)
 
     def same_complex(self, other: Self) -> bool:
-        _ = other
-        raise NotImplementedError
+        return (
+            self.sequence == other.sequence
+            and self.ligand_name == other.ligand_name
+            and self.ligand_smiles == other.ligand_smiles
+        )
 
     def decode_structure_data(self) -> bytes:
         return base64.b64decode(self.structure_data.encode("utf-8"))
@@ -290,60 +323,186 @@ class Structure(JSONSerializable):
         the write-side mirror of :meth:`to_mda_universe`.
         """
         block = atoms_to_pdb_string(atoms)
-        return replace(
-            self,
+        return self.copy_with_replacements(  # type: ignore
             structure_format=StructureFormat.PDB,
             structure_data=base64.b64encode(block.encode()).decode(),
         )
 
-    def to_dict(self) -> dict[Any, Any]:
-        return to_shallow_dict(self)
 
-    @classmethod
-    def from_dict(cls, data: dict[Any, Any]) -> Self:
-        data.pop("__oph_custom__", None)
-        return cls(**data)
+class EmptyReplicatesError(Exception):
+    """To be raised when a StructureReplicates instance is initialized without any structures."""
 
 
-@dataclass(frozen=True)
-class StructureSet(JSONSerializable):
-    """A list of Structure instances with convenience methods for serialization."""
+class StructureReplicates(GufeTokenizable):  # type: ignore
+    """Collection of structures representing the same complex."""
 
-    structures: list[Structure]
+    def __init__(self, replicates: list[Structure]):
+        """Initialize a StructureReplicates instance.
 
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "structures", sorted(self.structures, key=lambda s: s.key()))
+        Parameters
+        ----------
+        replicates
+            A non-empty list of Structures that represent the same complex.
 
-    @classmethod
-    def from_structures(cls, structures: list[Structure]) -> Self:
-        return cls(structures=[*{*structures}])
+        Raises
+        ------
+        EmptyReplicatesError
+            When replicates is provided with a non-empty list.
+        """
+        self.replicates = replicates
 
-    @classmethod
-    def from_file(cls, file_path: str | Path) -> Self:
-        file_path = Path(file_path)
-        content = json.loads(file_path.read_text())
-        structures = [Structure(**structure) for structure in content["structures"]]
-        artifact_data = content | {"structures": structures}
-        return cls(**artifact_data)
+        if len(self.replicates) == 0:
+            raise EmptyReplicatesError("StructureReplicates cannot be empty")
 
-    def write(self, file_path: str | Path) -> None:
-        file_path = Path(file_path)
-        with open(file_path, "w") as f:
-            json.dump(asdict(self), f)
+        if not self._all_shared_complex():
+            raise ValueError("StructureReplicates can only contain structures representing the same complex")
 
-    def to_dict(self) -> dict[Any, Any]:
-        return to_shallow_dict(self)
+        self.ligand_name = self.replicates[0].ligand_name
+        self.ligand_smiles = self.replicates[0].ligand_smiles
+        self.sequence = self.replicates[0].sequence
 
-    @classmethod
-    def from_dict(cls, data: dict[Any, Any]) -> Self:
-        data.pop("__oph_custom__", None)
-        return cls(**data)
+    def iter_replicates(self) -> Iterator[Structure]:
+        yield from self.replicates
+
+    def _all_shared_complex(self) -> bool:
+        """All replicates must share the same ligand name, ligand smiles, and sequence."""
+        first = self.replicates[0]
+        return all([first.same_complex(s) for s in self.replicates[1:]])
+
+    def _to_dict(self) -> dict[Any, Any]:
+        return {"replicates": self.replicates}
+
+    def same_complex(self, other: Self) -> bool:
+        return (
+            self.ligand_name == other.ligand_name
+            and self.ligand_smiles == other.ligand_smiles
+            and self.sequence == other.sequence
+        )
 
     def __len__(self) -> int:
-        return len(self.structures)
+        return len(self.replicates)
 
-    def __iter__(self) -> Iterator[Structure]:
-        yield from self.structures
+    @classmethod
+    def _from_dict(cls, dct: dict[Any, Any]) -> Self:
+        return cls(**dct)
 
-    def __getitem__(self, key: int) -> Structure:
-        return self.structures[key]
+    @classmethod
+    def _defaults(cls) -> dict[Any, Any]:
+        return {}
+
+
+class EmptyStructureSetError(Exception): ...
+
+
+class StructureSet(GufeTokenizable):  # type: ignore
+    """Collection of StructureReplicates representing a congeneric series."""
+
+    def __init__(self, replicate_sets: list[StructureReplicates]):
+        """Initialize a StructureSet instance.
+
+        Parameters
+        ----------
+        replicate_sets
+            A non-empty list of StructureReplicates.
+
+        Raises
+        ------
+        EmptyStructureSetError
+            When an empty list is provided for replicate_sets.
+        """
+        self.replicate_sets = replicate_sets
+
+        if len(self.replicate_sets) == 0:
+            raise EmptyStructureSetError("StructureSet cannot be empty")
+
+        if self._has_repeated_complexes():
+            raise ValueError("StructureSet can not contain multiple StructureReplicates representing the same complex")
+
+    def iter_replicates(self) -> Iterator[StructureReplicates]:
+        yield from self.replicate_sets
+
+    def _has_repeated_complexes(self) -> bool:
+        seen = set()
+        for s in self.replicate_sets:
+            key = (s.sequence, s.ligand_name, s.ligand_smiles)
+            if key in seen:
+                return True
+            seen.add(key)
+        return False
+
+    def _to_dict(self) -> dict[Any, Any]:
+        return {
+            "replicate_sets": self.replicate_sets,
+        }
+
+    @classmethod
+    def _from_dict(cls, dct: dict[Any, Any]) -> Self:
+        return cls(**dct)
+
+    @classmethod
+    def _defaults(cls) -> dict[Any, Any]:
+        return {}
+
+    @classmethod
+    def from_structures(cls, structures: list[list[Structure]]) -> Self:
+        groups = []
+        for complex_group in structures:
+            groups.append(StructureReplicates([r for r in complex_group]))
+        return cls(groups)
+
+    def __len__(self) -> int:
+        return len(self.replicate_sets)
+
+
+class EmptyStructureSeriesError(Exception): ...
+
+
+class StructureSeries(GufeTokenizable):  # type: ignore
+    """Collection of structures representing a congeneric series."""
+
+    def __init__(self, series: list[Structure]):
+        """Initialize a StructureSeries instance.
+
+        Parameters
+        ----------
+        series
+            A non-empty list of Structure instances.
+
+        Raises
+        ------
+        EmptyStructureSeriesError
+            When an empty list is provided for series.
+        """
+        self.series = series
+
+        if len(self.series) == 0:
+            raise EmptyStructureSeriesError("StructureSeries cannot be empty")
+
+        if not self._no_shared_complex():
+            raise ValueError("StructureSeries can not contain multiple structures representing the same complex")
+
+    def _no_shared_complex(self) -> bool:
+        seen = set()
+        for s in self.iter_series():
+            key = (s.sequence, s.ligand_name, s.ligand_smiles)
+            if key in seen:
+                return False
+            seen.add(key)
+        return True
+
+    def iter_series(self) -> Iterator[Structure]:
+        yield from self.series
+
+    def _to_dict(self) -> dict[Any, Any]:
+        return {"series": self.series}
+
+    @classmethod
+    def _from_dict(cls, dct: dict[Any, Any]) -> Self:
+        return cls(**dct)
+
+    def __len__(self) -> int:
+        return len(self.series)
+
+    @classmethod
+    def _defaults(cls) -> dict[Any, Any]:
+        return {}
