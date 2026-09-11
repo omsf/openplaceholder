@@ -2,8 +2,9 @@ import logging
 import tomllib
 from pathlib import Path
 
-from openplaceholder.core.resolver import _build_plugin
-from openplaceholder.core.structure import StructureSet
+from openplaceholder.core.assembly.mapper import Mapper
+from openplaceholder.core.loader import _build_plugin
+from openplaceholder.core.structure import StructureSeries
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger("OPH-RUN-MAPPER")
@@ -17,10 +18,12 @@ if __name__ == "__main__":
     config = tomllib.loads(TOML_CONFIG.read_text())
 
     # use the plugin builder machinery to simplify mapper creation
-    mapper = _build_plugin(config["assembly"]["mapping"])
+    mapper: Mapper = _build_plugin(config["assembly"]["mapping"])
     logger.info("Created plugin instance, %s", mapper)
 
-    post_transformation_structures = StructureSet.from_file("post_transformation_structures.json")
+    post_transformation_structures: StructureSeries = StructureSeries.from_json(
+        Path("post_transformation_structures.json")
+    )
 
     logger.info(
         "Read post-transformation structures from disk: %d structures found", len(post_transformation_structures)

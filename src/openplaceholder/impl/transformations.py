@@ -16,6 +16,7 @@ from openplaceholder.core.assembly.transformation import (
 )
 from openplaceholder.core.structure import (
     Structure,
+    StructureSeries,
     atoms_to_pdb_string,
 )
 from openplaceholder.vendor.protonate_utils import (
@@ -65,20 +66,22 @@ class MaxVolumeSiteSubstitutionTransformation(Transformation):
     def _setup(self) -> None:
         pass
 
-    def _transform(self, structures: list[Structure]) -> list[Structure]:
+    def _transform(self, structures: StructureSeries) -> StructureSeries:
 
         if len(structures) == 1:
             return structures
 
-        reference_structure = structures[0]
+        # TODO: would be cleaner if we supported __getitem__
+        flat_structures = list(structures.iter_series())
+        reference_structure = flat_structures[0]
         reference_volume = _ligand_volume(reference_structure)
-        for s in structures[1:]:
+        for s in flat_structures[1:]:
             if (_volume := _ligand_volume(s)) > reference_volume:
                 reference_volume = _volume
                 reference_structure = s
         u_reference = reference_structure.to_mda_universe()
         canonical_protein = u_reference.select_atoms("protein")
-        return [self._substitute(s, u_reference, canonical_protein) for s in structures]
+        return StructureSeries([self._substitute(s, u_reference, canonical_protein) for s in flat_structures])
 
     @staticmethod
     def _substitute(structure: Structure, reference: mda.Universe, canonical_protein: mda.AtomGroup) -> Structure:
@@ -102,8 +105,8 @@ class HeavyAtomAdditionTransformation(Transformation):
     def _setup(self) -> None:
         pass
 
-    def _transform(self, structures: list[Structure]) -> list[Structure]:
-        return [self._prepare_protein(s) for s in structures]
+    def _transform(self, structures: StructureSeries) -> StructureSeries:
+        return StructureSeries([self._prepare_protein(s) for s in structures.iter_series()])
 
     def _prepare_protein(self, structure: Structure) -> Structure:
 
@@ -142,8 +145,8 @@ class ComplexProtonationTransformation(Transformation):
     def _setup(self) -> None:
         pass
 
-    def _transform(self, structures: list[Structure]) -> list[Structure]:
-        return [self._protonate_protein(self._protonate_ligand(s)) for s in structures]
+    def _transform(self, structures: StructureSeries) -> StructureSeries:
+        return StructureSeries([self._protonate_protein(self._protonate_ligand(s)) for s in structures.iter_series()])
 
     def _protonate_ligand(self, structure: Structure) -> Structure:
         mol: Chem.Mol = protonate_molecule(structure.to_rdkit_ligand_mol(), self._config.ph)  # type: ignore[no-untyped-call]

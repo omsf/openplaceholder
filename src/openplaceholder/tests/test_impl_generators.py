@@ -1,9 +1,5 @@
 import tempfile
 
-from openplaceholder.impl.generator.directory import (
-    DirectoryGenerator,
-    DirectoryGeneratorConfig,
-)
 from openplaceholder.impl.generator.json import (
     JSONGenerator,
     JSONGeneratorConfig,
@@ -27,15 +23,6 @@ class TestOpenFold3Generator:
                 generator_directory="./of3_dir/",
             )
             OpenFold3Generator(config)
-
-
-class TestDirectoryGenerator:
-
-    def test_init(self) -> None:
-
-        with tempfile.TemporaryDirectory() as d:
-            config = DirectoryGeneratorConfig(path=str(d))
-            DirectoryGenerator(config)
 
 
 class TestJSONGenerator:
