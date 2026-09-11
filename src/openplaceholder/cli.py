@@ -17,6 +17,29 @@ from openplaceholder.core.runner import run_serial
 STAGE_CHOICES = tuple(name.lower() for name in Stage.__members__)
 
 
+def _enable_smoketest_dropping(config_map: dict[str, Any]) -> None:
+    """Turn on ``drop_failures`` for the configured smoketest transformation.
+
+    The smoketest errors on any complex a force field cannot handle;
+    this is how --drop-smoketest-failures asks it to keep the ones that
+    passed and carry on instead.
+    """
+    # imported here rather than at module scope: pulling in the OpenMM/OpenFF
+    # stack costs a couple of seconds that every `oph --help` would otherwise pay
+    from openplaceholder.impl.transformations import ComplexSmoketestTransformation
+
+    target = f"{ComplexSmoketestTransformation.__module__}:{ComplexSmoketestTransformation.__qualname__}"
+    smoketests = [
+        section
+        for section in config_map.get("assembly", {}).get("transformations", [])
+        if section.get("implementation") == target
+    ]
+    if not smoketests:
+        raise SystemExit(f"--drop-smoketest-failures needs a '{target}' in assembly.transformations")
+    for section in smoketests:
+        section["drop_failures"] = True
+
+
 @click.group()
 def cli() -> None:
     """OpenPlaceHolder: co-folding to alchemical inputs."""
@@ -59,8 +82,21 @@ def cli() -> None:
     type=click.Path(dir_okay=False, path_type=Path),
     help="Output path for the pipeline result JSON.",
 )
+@click.option(
+    "--drop-smoketest-failures",
+    is_flag=True,
+    help="Drop complexes that fail the smoketest instead of erroring on them.",
+)
 @click.option("-v", "--verbose", is_flag=True, help="Emit debug logging.")
-def run(config: Path, begin: str | None, end: str | None, input: Path | None, output: Path, verbose: bool) -> None:
+def run(
+    config: Path,
+    begin: str | None,
+    end: str | None,
+    input: Path | None,
+    output: Path,
+    drop_smoketest_failures: bool,
+    verbose: bool,
+) -> None:
     """Run the pipeline through a beginning and end stage.
 
     \b
@@ -78,6 +114,10 @@ def run(config: Path, begin: str | None, end: str | None, input: Path | None, ou
     Resume from a prior JSON output:
 
         openplaceholder run -c config.toml -i generated_structures.json --begin validator -o network.json
+
+    Keep going when a complex fails the smoketest:
+
+        openplaceholder run -c config.toml --end mapper --drop-smoketest-failures -o network.json
     """
     logging.basicConfig(level=logging.DEBUG if verbose else logging.INFO)
 
@@ -111,6 +151,8 @@ def run(config: Path, begin: str | None, end: str | None, input: Path | None, ou
             raise SystemExit(f"'{input}' unable to be parsed as JSON.")
 
     config_map = load_toml(config)
+    if drop_smoketest_failures:
+        _enable_smoketest_dropping(config_map)
 
     pipeline = Pipeline.from_config_map(config_map)
     result: GufeTokenizable = run_serial(pipeline, data)

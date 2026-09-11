@@ -11,6 +11,7 @@ from openplaceholder.impl.mappers import LOMAPMapper
 from openplaceholder.impl.selector.mpo import MPOSelector
 from openplaceholder.impl.transformations import (
     ComplexProtonationTransformation,
+    ComplexSmoketestTransformation,
     HeavyAtomAdditionTransformation,
     MaxVolumeSiteSubstitutionTransformation,
 )
@@ -46,6 +47,9 @@ implementation = "openplaceholder.impl.transformations:HeavyAtomAdditionTransfor
 implementation = "openplaceholder.impl.transformations:ComplexProtonationTransformation"
 ph = 7.0
 
+[[assembly.transformations]]
+implementation = "openplaceholder.impl.transformations:ComplexSmoketestTransformation"
+
 [assembly.mapping]
 implementation = "openplaceholder.impl.mappers:LOMAPMapper"
 """
@@ -78,4 +82,8 @@ class TestResolvePipeline:
             assert isinstance(protonation, ComplexProtonationTransformation)
             assert protonation._config.ph == 7.0
 
-            assert isinstance(pipeline.plugins[6], LOMAPMapper)
+            smoketest = pipeline.plugins[6]
+            assert isinstance(smoketest, ComplexSmoketestTransformation)
+            assert smoketest._config.drop_failures is False
+
+            assert isinstance(pipeline.plugins[7], LOMAPMapper)
