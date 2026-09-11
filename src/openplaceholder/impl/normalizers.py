@@ -34,16 +34,18 @@ class BindingSiteAligner(Normalizer):
     def _setup(self) -> None:
         pass
 
-    def _normalize(self, structures: list[StructureSet]) -> list[StructureSet]:
-        reference = structures[0][0].to_mda_universe()
+    def _normalize(self, structures: StructureSet) -> StructureSet:
+        reference = next(structures.iter_replicates()).replicates[0].to_mda_universe()
         site = reference.select_atoms(f"name CA and around {self._config.radius} (not protein and not water)")
         site_selection = f"name CA and resid {' '.join(str(resid) for resid in site.resids)}"
         logger.info("aligning on %d binding site CA atoms", len(site))
 
-        return [
-            StructureSet.from_structures([self._superpose(s, reference, site_selection) for s in structure_set])
-            for structure_set in structures
-        ]
+        return StructureSet.from_structures(
+            [
+                [self._superpose(s, reference, site_selection) for s in replicates.iter_replicates()]
+                for replicates in structures.iter_replicates()
+            ]
+        )
 
     @staticmethod
     def _superpose(structure: Structure, reference: Universe, site_selection: str) -> Structure:

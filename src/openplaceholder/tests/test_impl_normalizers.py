@@ -57,7 +57,10 @@ def make_poses() -> Callable[[int], list[Structure]]:
 
 def _normalize(structures: list[Structure]) -> list[Structure]:
     aligner = BindingSiteAligner(config=BindingSiteAlignerConfig())
-    return list(aligner.normalize([StructureSet.from_structures(structures)])[0])
+    # one replicate set per pose: each carries its own ligand_name, and a
+    # StructureSet may not hold two replicate sets for the same complex
+    normalized = aligner.normalize(StructureSet.from_structures([[s] for s in structures]))
+    return [s for replicates in normalized.iter_replicates() for s in replicates.iter_replicates()]
 
 
 def _max_ca_rmsd(structures: list[Structure]) -> float:

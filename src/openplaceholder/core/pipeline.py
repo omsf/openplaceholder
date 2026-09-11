@@ -13,6 +13,7 @@ class Stage(IntEnum):
 
     GENERATOR = auto()
     VALIDATOR = auto()
+    NORMALIZER = auto()
     SELECTOR = auto()
     TRANSFORMATION = auto()
     MAPPER = auto()
@@ -24,6 +25,7 @@ class Stage(IntEnum):
 CONFIG_PLUGIN_MAP: dict[Stage, tuple[tuple[str, ...], bool]] = {
     Stage.GENERATOR: (("generation", "generator"), False),
     Stage.VALIDATOR: (("selection", "validators"), True),
+    Stage.NORMALIZER: (("selection", "normalizers"), True),
     Stage.SELECTOR: (("selection", "selector"), False),
     Stage.TRANSFORMATION: (("assembly", "transformations"), True),
     Stage.MAPPER: (("assembly", "mapping"), False),
