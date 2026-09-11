@@ -8,6 +8,9 @@ from openplaceholder.core.structure import Structure, StructureSeries
 from openplaceholder.impl.transformations import (
     ComplexProtonationTransformation,
     ComplexProtonationTransformationConfig,
+    ComplexSmoketestError,
+    ComplexSmoketestTransformation,
+    ComplexSmoketestTransformationConfig,
     HeavyAtomAdditionTransformation,
     HeavyAtomAdditionTransformationConfig,
     MaxVolumeSiteSubstitutionTransformation,
@@ -118,3 +121,57 @@ class TestComplexProtonationTransformation:
         universe = protonated.to_mda_universe()
         assert len(universe.select_atoms("protein and element H")) > 0
         assert len(universe.select_atoms("not protein and element H")) > 0
+
+
+@pytest.fixture(scope="module")
+def prepared_complex() -> Structure:
+    """A tyk2 complex taken through the transformations the smoketest expects to run after."""
+    series = StructureSeries([_tyk2_complex()])
+    series = HeavyAtomAdditionTransformation(HeavyAtomAdditionTransformationConfig()).transform(series)
+    series = ComplexProtonationTransformation(ComplexProtonationTransformationConfig(ph=7.0)).transform(series)
+    return series.series[0]
+
+
+def _smoketest(*structures: Structure, drop_failures: bool = False) -> StructureSeries:
+    return ComplexSmoketestTransformation(ComplexSmoketestTransformationConfig(drop_failures=drop_failures)).transform(
+        StructureSeries(list(structures))
+    )
+
+
+def _clashing(structure: Structure) -> Structure:
+    """The same complex with its ligand buried in the protein."""
+    # a fresh Structure: to_mda_universe is cached, so translating the
+    # original's own universe would leak the clash into the other tests
+    clashing: Structure = structure.copy_with_replacements(ligand_name="clashing")
+    universe = clashing.to_mda_universe()
+    universe.select_atoms("not protein").translate([1.5, 0.0, 0.0])
+    return clashing.with_atoms(universe.atoms)
+
+
+@pytest.mark.skipif(not _HAS_DIMORPHITE, reason="dimorphite_dl (ligand protonation) not installed")
+class TestComplexSmoketestTransformation:
+
+    def test_prepared_complex_passes(self, prepared_complex: Structure) -> None:
+        assert [s.ligand_name for s in _smoketest(prepared_complex).iter_series()] == ["ejm55"]
+
+    def test_unprotonated_complex_raises(self) -> None:
+        # the smoketest runs last for a reason: a bare co-folded complex has
+        # neither ligand nor protein hydrogens, so nothing can be parameterised
+        with pytest.raises(ComplexSmoketestError, match="no explicit hydrogens"):
+            _smoketest(_tyk2_complex())
+
+    def test_clashing_pose_raises(self, prepared_complex: Structure) -> None:
+        with pytest.raises(ComplexSmoketestError, match="on top of each other"):
+            _smoketest(_clashing(prepared_complex))
+
+    def test_one_failure_takes_the_whole_series_down(self, prepared_complex: Structure) -> None:
+        with pytest.raises(ComplexSmoketestError, match="1 of 2 structures failed"):
+            _smoketest(prepared_complex, _clashing(prepared_complex))
+
+    def test_drop_failures_keeps_the_structures_that_passed(self, prepared_complex: Structure) -> None:
+        result = _smoketest(prepared_complex, _clashing(prepared_complex), drop_failures=True)
+        assert [s.ligand_name for s in result.iter_series()] == ["ejm55"]
+
+    def test_drop_failures_still_raises_when_nothing_passes(self, prepared_complex: Structure) -> None:
+        with pytest.raises(ComplexSmoketestError, match="no structures survived"):
+            _smoketest(_clashing(prepared_complex), drop_failures=True)
