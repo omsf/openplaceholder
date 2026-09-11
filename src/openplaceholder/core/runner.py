@@ -10,7 +10,7 @@ from openplaceholder.core.generation.generator import (
 )
 from openplaceholder.core.pipeline import Pipeline
 from openplaceholder.core.selection.normalizer import Normalizer
-from openplaceholder.core.selection.selector import Selector
+from openplaceholder.core.selectioselector import Selector
 from openplaceholder.core.selection.validator import Validator
 
 logger = logging.getLogger(__name__)
