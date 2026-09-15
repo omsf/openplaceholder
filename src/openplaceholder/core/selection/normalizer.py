@@ -12,15 +12,14 @@ class NormalizerConfigBase(ConfigBase): ...
 
 
 class Normalizer(Module, ABC):
-    """Puts candidate structures on a common footing, before any are chosen.
-
-    Normalizers run over the whole StructureSet, so unlike a ``Transformation``
-    they see every replicate rather than the selection made from them, and they
-    leave each complex chemically untouched.
-    """
+    """Apply non-chemical changes to Structures within a StructureSet."""
 
     @abstractmethod
     def _normalize(self, structures: StructureSet) -> StructureSet:
+        """The normization function that must be implemented. The
+        implementation must only perform non-chemical transformations
+        to the underlying Structures, returning an entirely new StructureSet.
+        """
         raise NotImplementedError
 
     def normalize(self, structures: StructureSet) -> StructureSet:
