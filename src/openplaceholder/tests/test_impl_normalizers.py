@@ -18,10 +18,12 @@ from openplaceholder.tests.helpers import read_gzip_file
 _EJM55_SMILES = "COC(=O)Nc1cc(NC(=O)c2c(Cl)cccc2Cl)ccn1"
 # PDB coordinates carry three decimals, so a write/read round trip is exact to ~0.001 A
 _PDB_PRECISION = 0.01
+# global seed for generating unique structures. For a single process
+# test suite this works fine, will need a refactor if we parallelize
+_GLOBAL_SEED = 0
 
 
 def _pose(pdb: bytes, seed: int) -> Structure:
-    """The tyk2 complex with its own ligand pose, in its own arbitrary frame."""
     structure = Structure(
         sequence="X",
         ligand_smiles=_EJM55_SMILES,
@@ -29,30 +31,36 @@ def _pose(pdb: bytes, seed: int) -> Structure:
         structure_format="pdb",
         structure_data=base64.b64encode(pdb).decode(),
     )
+
     rng = np.random.default_rng(seed)
     universe = structure.to_mda_universe().copy()
 
-    # displace the ligand first, so each pose sits differently in its own
-    # protein, then put the whole complex into an arbitrary frame
+    # offset ligand uniformly
     ligand = universe.select_atoms("not protein and not water")
-    ligand.positions = ligand.positions + rng.normal(scale=0.3, size=3)
-    universe.atoms.positions = universe.atoms.positions @ Rotation.random(random_state=seed).as_matrix().T + rng.normal(
-        scale=25.0, size=3
-    )
+    ligand.positions += rng.normal(scale=0.3, size=3)
+
+    # rotate the system
+    universe.atoms.positions = universe.atoms.positions @ Rotation.random(random_state=seed).as_matrix().T
+    # translate whole system
+    universe.atoms.positions = universe.atoms.positions + rng.normal(scale=25.0, size=3)
+
     return structure.with_atoms(universe.atoms)
 
 
-# Structure.to_mda_universe is cached by *value*, so equal structures share one
-# universe. Each test therefore builds poses from its own seeds, keeping its
-# structures (and their caches) independent of every other test's.
-@pytest.fixture(scope="module")
-def make_poses() -> Callable[[int], list[Structure]]:
+PoseFactory = Callable[[int], list[Structure]]
+
+
+@pytest.fixture
+def make_poses() -> PoseFactory:
     pdb = read_gzip_file(str(TYK2_LIG_PDB))
 
-    def _make(first_seed: int) -> list[Structure]:
-        return [_pose(pdb, seed) for seed in range(first_seed, first_seed + 3)]
+    def factory(n_poses: int = 3) -> list[Structure]:
+        global _GLOBAL_SEED
+        starting_seed = _GLOBAL_SEED
+        _GLOBAL_SEED += n_poses
+        return [_pose(pdb, starting_seed + seed_offset) for seed_offset in range(n_poses)]
 
-    return _make
+    return factory
 
 
 def _normalize(structures: list[Structure]) -> list[Structure]:
@@ -75,8 +83,8 @@ def _ligand_to_protein_distances(structure: Structure) -> np.ndarray:
     return np.asarray(np.linalg.norm(ligand[:, None] - protein[None], axis=-1))
 
 
-def test_normalize_brings_complexes_into_a_common_frame(make_poses: Callable[[int], list[Structure]]) -> None:
-    poses = make_poses(0)
+def test_normalize_brings_complexes_into_a_common_frame(make_poses: PoseFactory) -> None:
+    poses = make_poses(3)
     assert _max_ca_rmsd(poses) > 5.0, "the poses should start out in different frames"
 
     normalized = _normalize(poses)
@@ -85,8 +93,8 @@ def test_normalize_brings_complexes_into_a_common_frame(make_poses: Callable[[in
     assert _max_ca_rmsd(normalized) < _PDB_PRECISION
 
 
-def test_normalize_preserves_each_cofolded_pose(make_poses: Callable[[int], list[Structure]]) -> None:
-    poses = make_poses(10)
+def test_normalize_preserves_each_cofolded_pose(make_poses: PoseFactory) -> None:
+    poses = make_poses(3)
     normalized = {s.ligand_name: s for s in _normalize(poses)}
 
     for pose in poses:
@@ -99,8 +107,8 @@ def test_normalize_preserves_each_cofolded_pose(make_poses: Callable[[int], list
         )
 
 
-def test_normalize_leaves_its_inputs_untouched(make_poses: Callable[[int], list[Structure]]) -> None:
-    poses = make_poses(20)
+def test_normalize_leaves_its_inputs_untouched(make_poses: PoseFactory) -> None:
+    poses = make_poses(3)
     # ligand_atoms() caches a universe that alignto would otherwise move in place
     before = [s.ligand_atoms().positions.copy() for s in poses]
 
