@@ -23,6 +23,7 @@ dependencies = [
     "click",
     "gufe",
     "openfe",
+	"openmm",
     "MDAnalysis",
     "rdkit",
     "posebusters",

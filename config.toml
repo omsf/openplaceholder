@@ -54,5 +54,8 @@ implementation = "openplaceholder.impl.transformations:HeavyAtomAdditionTransfor
 implementation = "openplaceholder.impl.transformations:ComplexProtonationTransformation"
 ph = 7.0
 
+[[assembly.transformations]]
+implementation = "openplaceholder.impl.transformations:ComplexSmoketestTransformation"
+
 [assembly.mapping]
 implementation = "openplaceholder.impl.mappers:KartografMapper"
