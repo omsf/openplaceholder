@@ -16,7 +16,7 @@ class Normalizer(Module, ABC):
 
     @abstractmethod
     def _normalize(self, structures: StructureSet) -> StructureSet:
-        """The normization function that must be implemented. The
+        """The normalization function that must be implemented. The
         implementation must only perform non-chemical transformations
         to the underlying Structures, returning an entirely new StructureSet.
         """

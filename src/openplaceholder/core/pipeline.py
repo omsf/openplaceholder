@@ -7,7 +7,7 @@ from openplaceholder.core.loader import _build_plugin
 
 
 class Stage(IntEnum):
-    """An interger enumeration of Stages, provided an explicit
+    """An integer enumeration of Stages, providing an explicit
     ordering to their execution.
     """
 
