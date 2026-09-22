@@ -104,9 +104,49 @@ def run_serial(pipeline: Pipeline, initial_data: Any) -> GufeTokenizable:
 def run_prefect(pipeline: Pipeline, initial_data: Any) -> GufeTokenizable:
     """Run the pipeline with Prefect orchestration.
 
-    Each stage is dispatched to a typed task wrapper (imported from
-    ``orchestration.prefect_tasks``), preserving identical I/O contracts
-    to ``run_serial`` while gaining distributed execution, retry,
-    timeout, and result-storage semantics.
+    Module run methods are wrapped in Prefect tasks enabling advanced
+    orchestration.
+
+    Parameters
+    ----------
+    pipeline
+        The Pipeline instance to execute.
+    initial_data
+        The first instance of data to be used by a module. The type of
+        this data depends on the first ``Module`` in the pipeline.
+
+    Returns
+    -------
+    The output type of the final module
+
     """
-    raise NotImplementedError
+
+    from openplaceholder.core.orchestration.prefect_tasks import (
+        map_structures,
+        select_structures,
+        transform_structures,
+        validate_structures,
+    )
+
+    assert pipeline.validators is not None
+    assert pipeline.selector is not None
+    assert pipeline.mapper is not None
+
+    data = validate_structures(pipeline.validators, initial_data)  # type: ignore[var-annotated]
+
+    assert isinstance(data, StructureSet)
+
+    data = select_structures(pipeline.selector, data)
+
+    assert pipeline.transformations is not None
+
+    for transformation in pipeline.transformations:
+        assert isinstance(data, StructureSeries)
+        data = transform_structures(transformation, data)
+
+    assert isinstance(data, StructureSeries)
+    data = map_structures(pipeline.mapper, data)
+
+    assert isinstance(data, GufeTokenizable)
+
+    return data

@@ -27,6 +27,7 @@ dependencies = [
     "rdkit",
     "posebusters",
     "pdbfixer",
+    "prefect",
     "biotite",
     "hydride",
 ]
@@ -93,6 +94,7 @@ rdkit = "*"
 prolif = ">=2.1"
 pdbfixer = "*"
 biotite = "*"
+prefect = "*"
 
 [tool.pixi.pypi-dependencies]
 openplaceholder = { path = ".", editable = true }
