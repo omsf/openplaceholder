@@ -1,0 +1,144 @@
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+from gufe import SmallMoleculeComponent
+from openff.units import unit
+from rdkit import Chem
+from rdkit.Chem.rdDistGeom import EmbedMolecule
+
+from openplaceholder.core.simulation.simulator import (
+    DisconnectedNetworkError,
+    EmptyNetworkError,
+)
+from openplaceholder.impl.simulators import OpenFESimulator, OpenFESimulatorConfig
+
+
+class _FakeDAGResult:
+    def __init__(self, ok: bool = True) -> None:
+        self._ok = ok
+        self.protocol_unit_failures = [] if ok else [type("F", (), {"exception": "boom"})()]
+
+    def ok(self) -> bool:
+        return self._ok
+
+
+def _ligand(name: str) -> SmallMoleculeComponent:
+    mol = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1"))
+    EmbedMolecule(mol, randomSeed=0xF00D)
+    return SmallMoleculeComponent(mol, name=name)
+
+
+class _FakeSystem:
+    """Stands in for a ChemicalSystem; only ``components`` is read."""
+
+    def __init__(self, ligand: str) -> None:
+        self.components = {"ligand": _ligand(ligand)}
+
+
+class _FakeTransformation:
+    def __init__(self, name: str, state_a: str = "lig_a", state_b: str = "lig_b") -> None:
+        self.name = name
+        self.key = f"key-{name}"
+        self.stateA = _FakeSystem(state_a)
+        self.stateB = _FakeSystem(state_b)
+        self.mapping = None
+
+
+class _FakeNetwork:
+    def __init__(self, names: list[str], edges: list[tuple[str, str]] | None = None) -> None:
+        pairs = edges or [("lig_a", "lig_b")] * len(names)
+        self.edges = [_FakeTransformation(n, a, b) for n, (a, b) in zip(names, pairs)]
+
+
+class TestOpenFESimulator:
+
+    def test_init(self, tmp_path: Path) -> None:
+        OpenFESimulator(OpenFESimulatorConfig(simulation_directory=tmp_path))
+
+    def test_settings_follow_asap_defaults(self, tmp_path: Path) -> None:
+        simulator = OpenFESimulator(
+            OpenFESimulatorConfig(simulation_directory=tmp_path, production_length_ns=0.5, equilibration_length_ns=0.2)
+        )
+        settings = simulator._protocol.settings
+
+        assert settings.simulation_settings.production_length == 0.5 * unit.nanoseconds
+        assert settings.simulation_settings.equilibration_length == 0.2 * unit.nanoseconds
+        assert settings.forcefield_settings.small_molecule_forcefield == "openff-2.2.0.offxml"
+        assert settings.solvation_settings.box_shape == "dodecahedron"
+        assert settings.alchemical_settings.softcore_LJ == "gapsys"
+        assert settings.alchemical_settings.turn_off_core_unique_exceptions is False
+        assert settings.thermo_settings.temperature == 298.15 * unit.kelvin
+        assert settings.protocol_repeats == 1
+
+    def test_empty_network_raises(self, tmp_path: Path) -> None:
+        simulator = OpenFESimulator(OpenFESimulatorConfig(simulation_directory=tmp_path))
+
+        with pytest.raises(EmptyNetworkError):
+            simulator.simulate(_FakeNetwork([]))
+
+    def test_runs_every_edge_into_its_own_directory(self, tmp_path: Path) -> None:
+        simulator = OpenFESimulator(OpenFESimulatorConfig(simulation_directory=tmp_path))
+        network = _FakeNetwork(["edge_a", "edge_b"])
+
+        with (
+            patch.object(OpenFESimulator, "_rebuild") as rebuild,
+            patch("openplaceholder.impl.simulators.execute_DAG") as execute,
+            # SimulationResults tokenizes its contents on construction, so stand it
+            # in with a plain list to keep this test about the execution loop
+            patch("openplaceholder.impl.simulators.SimulationResults", list),
+        ):
+            execute.return_value = _FakeDAGResult()
+            simulator._protocol.gather = lambda _: type("R", (), {"get_estimate": lambda self: 1.0})()
+            results = simulator.simulate(network)
+
+        assert len(results) == 2
+        assert rebuild.call_count == 2
+        assert {p.name for p in tmp_path.iterdir()} == {"edge_a", "edge_b"}
+        for call in execute.call_args_list:
+            assert call.kwargs["raise_error"] is False
+            assert call.kwargs["keep_shared"] is True
+
+    def test_failed_edge_does_not_stop_the_network(self, tmp_path: Path) -> None:
+        simulator = OpenFESimulator(OpenFESimulatorConfig(simulation_directory=tmp_path))
+        network = _FakeNetwork(["edge_a", "edge_b"])
+
+        with (
+            patch.object(OpenFESimulator, "_rebuild"),
+            patch("openplaceholder.impl.simulators.execute_DAG") as execute,
+            patch("openplaceholder.impl.simulators.SimulationResults", list),
+        ):
+            execute.side_effect = [_FakeDAGResult(ok=False), _FakeDAGResult(ok=True)]
+            simulator._protocol.gather = lambda _: type("R", (), {"get_estimate": lambda self: 1.0})()
+            results = simulator.simulate(network)
+
+        # the failing edge is recorded rather than aborting the remaining edges
+        assert len(results) == 2
+        assert [r.ok() for r in results] == [False, True]
+
+    def test_disconnected_ligands_raise(self, tmp_path: Path) -> None:
+        simulator = OpenFESimulator(OpenFESimulatorConfig(simulation_directory=tmp_path))
+        # a->b and c->d never meet, so their dG estimates share no reference
+        network = _FakeNetwork(["e1", "e2"], edges=[("lig_a", "lig_b"), ("lig_c", "lig_d")])
+
+        with pytest.raises(DisconnectedNetworkError, match="2 disconnected groups"):
+            simulator.simulate(network)
+
+    def test_rbfe_legs_are_not_mistaken_for_a_split(self, tmp_path: Path) -> None:
+        """Complex and solvent legs touch disjoint ChemicalSystems but the same ligands."""
+        simulator = OpenFESimulator(OpenFESimulatorConfig(simulation_directory=tmp_path))
+        network = _FakeNetwork(
+            ["a_complex_b", "a_solvent_b", "b_complex_c", "b_solvent_c"],
+            edges=[("lig_a", "lig_b"), ("lig_a", "lig_b"), ("lig_b", "lig_c"), ("lig_b", "lig_c")],
+        )
+
+        with (
+            patch.object(OpenFESimulator, "_rebuild"),
+            patch("openplaceholder.impl.simulators.execute_DAG") as execute,
+            patch("openplaceholder.impl.simulators.SimulationResults", list),
+        ):
+            execute.return_value = _FakeDAGResult()
+            simulator._protocol.gather = lambda _: type("R", (), {"get_estimate": lambda self: 1.0})()
+            results = simulator.simulate(network)
+
+        assert len(results) == 4

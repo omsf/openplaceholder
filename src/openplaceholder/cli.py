@@ -93,8 +93,9 @@ def run(config: Path, begin: str | None, end: str | None, input: Path | None, ou
         case str() as b, str() as e:
             first = Stage.__members__[b.upper()]
             last = Stage.__members__[e.upper()]
-            if first > last:
-                raise SystemExit(f"'{b.lower()}' is performed after '{e.lower()}'")
+
+    if first > last:
+        raise SystemExit(f"'{first.name.lower()}' is performed after '{last.name.lower()}'")
 
     if first is Stage.GENERATOR and input is not None:
         raise SystemExit("If the beginning stage is a generator, no input should be provided.")
@@ -112,7 +113,8 @@ def run(config: Path, begin: str | None, end: str | None, input: Path | None, ou
 
     config_map = load_toml(config)
 
-    pipeline = Pipeline.from_config_map(config_map)
+    partial = (first, last) != (Stage.GENERATOR, Stage.MAPPER)
+    pipeline = Pipeline.from_config_map(config_map, allow_partial=partial, lower=first, upper=last)
     result: GufeTokenizable = run_serial(pipeline, data)
     result.to_json(output)
 
