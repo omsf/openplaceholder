@@ -54,7 +54,7 @@ docs = [
 [build-system]
 requires = [
     "setuptools",
-    "versioningit",
+    "setuptools-scm[simple]",
 ]
 build-backend = "setuptools.build_meta"
 
@@ -72,14 +72,6 @@ profile = "black"
 python_version = "3.12"
 strict = true
 ignore_missing_imports = true
-
-[tool.versioningit]
-default-version = "1+unknown"
-
-[tool.versioningit.vcs]
-method = "git"
-match = ["v*"]
-default-tag = "v0.0.0"
 
 [tool.pixi.workspace]
 channels = ["conda-forge"]
