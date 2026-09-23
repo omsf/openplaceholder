@@ -20,6 +20,10 @@ class EmptyNetworkError(Exception):
     """To be raised when a network contains no transformations to run."""
 
 
+class UnsupportedProtocolError(Exception):
+    """To be raised when a network carries a protocol the simulator cannot run."""
+
+
 class DisconnectedNetworkError(Exception):
     """To be raised when a network's ligands do not form one connected component.
 
@@ -81,7 +85,7 @@ class SimulationResults(GufeTokenizable):  # type: ignore
 
     def ok(self) -> bool:
         """Whether every transformation completed without failures."""
-        return all(result.ok() for result in self.dag_results)
+        return bool(self.dag_results) and all(result.ok() for result in self.dag_results)
 
 
 class Simulator(Module, ABC):

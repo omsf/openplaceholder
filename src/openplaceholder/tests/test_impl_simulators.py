@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 import pytest
 from gufe import SmallMoleculeComponent
+from openfe.protocols.openmm_rfe import RelativeHybridTopologyProtocol
 from openff.units import unit
 from rdkit import Chem
 from rdkit.Chem.rdDistGeom import EmbedMolecule
@@ -11,6 +12,7 @@ from rdkit.Chem.rdDistGeom import EmbedMolecule
 from openplaceholder.core.simulation.simulator import (
     DisconnectedNetworkError,
     EmptyNetworkError,
+    UnsupportedProtocolError,
 )
 from openplaceholder.impl.simulators import OpenFESimulator, OpenFESimulatorConfig
 
@@ -40,8 +42,13 @@ class _FakeSystem:
         self.components = {"ligand": _ligand(ligand)}
 
 
+#: a real protocol instance, so _validate sees a supported one on the fakes
+_RHT = RelativeHybridTopologyProtocol(settings=RelativeHybridTopologyProtocol.default_settings())
+
+
 class _FakeTransformation:
     def __init__(self, name: str, state_a: str = "lig_a", state_b: str = "lig_b") -> None:
+        self.protocol = _RHT
         self.name = name
         self.key = f"key-{name}"
         self.stateA = _FakeSystem(state_a)
@@ -86,6 +93,19 @@ class TestSimulationResults:
         results.network, results.dag_results = _Net([a, b]), [_R("k-b"), _R("k-a")]
 
         assert [t for t, _ in results] == [b, a]
+
+    def test_empty_results_are_not_ok(self) -> None:
+        """A run where every edge was skipped must not report success."""
+        from openplaceholder.core.simulation.simulator import SimulationResults
+
+        class _Net:
+            edges: list[object] = []
+
+        results = SimulationResults.__new__(SimulationResults)
+        results.network, results.dag_results = _Net(), []
+
+        assert len(results) == 0
+        assert results.ok() is False
 
     def test_unmatched_result_is_an_error_not_a_silent_skip(self) -> None:
         from openplaceholder.core.simulation.simulator import SimulationResults
@@ -240,3 +260,48 @@ class TestOpenFESimulator:
             results = simulator.simulate(_FakeNetwork(["edge_a"]))
 
         assert len(results) == 1
+
+    def test_foreign_protocol_is_rejected_before_any_work(self, tmp_path: Path) -> None:
+        """_rebuild would silently swap the protocol, so refuse up front."""
+        simulator = OpenFESimulator(OpenFESimulatorConfig(simulation_directory=tmp_path))
+        network = _FakeNetwork(["edge_a"])
+        network.edges[0].protocol = object()  # not a RelativeHybridTopologyProtocol
+
+        with patch("openplaceholder.impl.simulators.execute_DAG") as execute:
+            with pytest.raises(UnsupportedProtocolError, match="RelativeHybridTopologyProtocol"):
+                simulator.simulate(network)
+
+        execute.assert_not_called()
+        assert not list(tmp_path.iterdir())
+
+    def test_colliding_names_are_rejected_before_any_work(self, tmp_path: Path) -> None:
+        """Two edges sharing a name would share a directory and clobber each other."""
+        simulator = OpenFESimulator(OpenFESimulatorConfig(simulation_directory=tmp_path))
+        network = _FakeNetwork(["same", "same"], edges=[("lig_a", "lig_b"), ("lig_b", "lig_c")])
+
+        with patch("openplaceholder.impl.simulators.execute_DAG") as execute:
+            with pytest.raises(ValueError, match="unique names"):
+                simulator.simulate(network)
+
+        execute.assert_not_called()
+
+    def test_edge_that_cannot_start_is_skipped_not_fatal(self, tmp_path: Path) -> None:
+        """create() raising (e.g. no atom mapping) must not end the campaign."""
+        simulator = OpenFESimulator(OpenFESimulatorConfig(simulation_directory=tmp_path))
+        network = _FakeNetwork(["edge_a", "edge_b"])
+
+        with (
+            patch.object(OpenFESimulator, "_rebuild"),
+            patch("openplaceholder.impl.simulators.execute_DAG") as execute,
+            patch("openplaceholder.impl.simulators.SimulationResults", _ResultsStub),
+            patch("openplaceholder.impl.simulators.AlchemicalNetwork", lambda edges: list(edges)),
+        ):
+            execute.side_effect = [ValueError("A single LigandAtomMapping is expected"), _FakeDAGResult()]
+            simulator._protocol.gather = lambda _: type("R", (), {"get_estimate": lambda self: 1.0})()
+            results = simulator.simulate(network)
+
+        # only the edge that ran is recorded, and network/results stay 1:1
+        assert len(results) == 1
+        assert len(results.network) == 1
+        assert not (tmp_path / "edge_a" / "dag_result.json").exists()
+        assert (tmp_path / "edge_b" / "dag_result.json").is_file()

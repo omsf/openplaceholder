@@ -1,4 +1,5 @@
 import logging
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from openplaceholder.core.simulation.simulator import (
     SimulationResults,
     Simulator,
     SimulatorConfigBase,
+    UnsupportedProtocolError,
 )
 
 logger = logging.getLogger(__name__)
@@ -64,31 +66,60 @@ class OpenFESimulator(Simulator):
             name=transformation.name,
         )
 
+    def _validate(self, network: AlchemicalNetwork) -> None:
+        """Reject networks this simulator would otherwise run incorrectly."""
+        foreign = {
+            type(t.protocol).__name__
+            for t in network.edges
+            if not isinstance(t.protocol, RelativeHybridTopologyProtocol)
+        }
+        if foreign:
+            # _rebuild would replace these with this simulator's protocol,
+            # silently running different physics than the network describes
+            raise UnsupportedProtocolError(
+                f"only RelativeHybridTopologyProtocol is supported, network carries: {sorted(foreign)}"
+            )
+
+        names = Counter(self._work_name(t) for t in network.edges)
+        if collisions := sorted(name for name, count in names.items() if count > 1):
+            # they would share a working directory and overwrite each other
+            raise ValueError(f"transformations do not have unique names: {collisions}")
+
+    @staticmethod
+    def _work_name(transformation: GufeTransformation) -> str:
+        return transformation.name or str(transformation.key)
+
     def _simulate(self, network: AlchemicalNetwork) -> SimulationResults:
+        self._validate(network)
         root = Path(self._config.simulation_directory)
 
         dag_results = []
         executed = []
         # network.edges is a frozenset; sort for a deterministic execution order
         for transformation in sorted(network.edges, key=lambda t: (t.name or "", str(t.key))):
-            name = transformation.name or str(transformation.key)
+            name = self._work_name(transformation)
             work_directory = root / name
-            work_directory.mkdir(parents=True, exist_ok=True)
-
-            # carries this simulator's protocol, so its key is the one the
-            # results reference and it records the settings that actually ran
-            rebuilt = self._rebuild(transformation)
-            executed.append(rebuilt)
 
             logger.info("running transformation %s", name)
-            dag_result = execute_DAG(
-                rebuilt.create(),
-                shared_basedir=work_directory,
-                scratch_basedir=work_directory,
-                keep_shared=self._config.keep_shared,
-                # a failed edge should not prevent the rest of the network
-                raise_error=False,
-            )
+            try:
+                work_directory.mkdir(parents=True, exist_ok=True)
+                # carries this simulator's protocol, so its key is the one the
+                # results reference and it records the settings that actually ran
+                rebuilt = self._rebuild(transformation)
+                dag_result = execute_DAG(
+                    rebuilt.create(),
+                    shared_basedir=work_directory,
+                    scratch_basedir=work_directory,
+                    keep_shared=self._config.keep_shared,
+                    # a failed *unit* is captured in the result rather than raised
+                    raise_error=False,
+                )
+            except Exception:
+                # everything above can still raise outside the protocol units
+                logger.exception("skipping transformation %s", name)
+                continue
+
+            executed.append(rebuilt)
             dag_results.append(dag_result)
             try:
                 dag_result.to_json(work_directory / "dag_result.json")
@@ -99,8 +130,12 @@ class OpenFESimulator(Simulator):
                 logger.warning("could not persist result for %s: %s", name, exc)
 
             if dag_result.ok():
-                estimate = self._protocol.gather([dag_result]).get_estimate()
-                logger.info("%s finished: dG = %s", name, estimate)
+                try:
+                    estimate = self._protocol.gather([dag_result]).get_estimate()
+                    logger.info("%s finished: dG = %s", name, estimate)
+                except Exception:
+                    # reporting only; the result is already stored either way
+                    logger.exception("%s finished but could not be summarised", name)
             else:
                 failures = dag_result.protocol_unit_failures
                 logger.error("%s failed: %s", name, failures[-1].exception if failures else "unknown")
