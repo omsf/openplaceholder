@@ -84,11 +84,19 @@ class OpenFESimulator(Simulator):
                 raise_error=False,
             )
             dag_results.append(dag_result)
+            try:
+                dag_result.to_json(work_directory / "dag_result.json")
+            except TypeError as exc:
+                # a failure whose exception carries a non-JSON-serialisable
+                # argument cannot be written out; losing one edge's file is far
+                # better than ending a run that takes days
+                logger.warning("could not persist result for %s: %s", name, exc)
 
             if dag_result.ok():
                 estimate = self._protocol.gather([dag_result]).get_estimate()
                 logger.info("%s finished: dG = %s", name, estimate)
             else:
-                logger.error("%s failed: %s", name, dag_result.protocol_unit_failures[-1].exception)
+                failures = dag_result.protocol_unit_failures
+                logger.error("%s failed: %s", name, failures[-1].exception if failures else "unknown")
 
         return SimulationResults(dag_results)

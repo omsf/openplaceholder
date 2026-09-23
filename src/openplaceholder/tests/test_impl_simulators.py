@@ -22,6 +22,9 @@ class _FakeDAGResult:
     def ok(self) -> bool:
         return self._ok
 
+    def to_json(self, path: Path) -> None:
+        Path(path).write_text("{}")
+
 
 def _ligand(name: str) -> SmallMoleculeComponent:
     mol = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1"))
@@ -95,6 +98,8 @@ class TestOpenFESimulator:
         assert len(results) == 2
         assert rebuild.call_count == 2
         assert {p.name for p in tmp_path.iterdir()} == {"edge_a", "edge_b"}
+        # each edge is persisted as it completes, not only at the end
+        assert all((tmp_path / e / "dag_result.json").is_file() for e in ("edge_a", "edge_b"))
         for call in execute.call_args_list:
             assert call.kwargs["raise_error"] is False
             assert call.kwargs["keep_shared"] is True
@@ -142,3 +147,42 @@ class TestOpenFESimulator:
             results = simulator.simulate(network)
 
         assert len(results) == 4
+
+    def test_unserialisable_failure_does_not_end_the_run(self, tmp_path: Path) -> None:
+        """One edge whose result cannot be written must not abort the network."""
+        simulator = OpenFESimulator(OpenFESimulatorConfig(simulation_directory=tmp_path))
+        network = _FakeNetwork(["edge_a", "edge_b"])
+
+        class _UnserialisableDAGResult(_FakeDAGResult):
+            def to_json(self, path: Path) -> None:
+                raise TypeError("Object of type object is not JSON serializable")
+
+        bad = _UnserialisableDAGResult(ok=False)
+
+        with (
+            patch.object(OpenFESimulator, "_rebuild"),
+            patch("openplaceholder.impl.simulators.execute_DAG") as execute,
+            patch("openplaceholder.impl.simulators.SimulationResults", list),
+        ):
+            execute.side_effect = [bad, _FakeDAGResult(ok=True)]
+            simulator._protocol.gather = lambda _: type("R", (), {"get_estimate": lambda self: 1.0})()
+            results = simulator.simulate(network)
+
+        assert len(results) == 2
+        assert not (tmp_path / "edge_a" / "dag_result.json").exists()
+        assert (tmp_path / "edge_b" / "dag_result.json").is_file()
+
+    def test_failure_without_recorded_failures_still_logs(self, tmp_path: Path) -> None:
+        simulator = OpenFESimulator(OpenFESimulatorConfig(simulation_directory=tmp_path))
+        empty = _FakeDAGResult(ok=False)
+        empty.protocol_unit_failures = []
+
+        with (
+            patch.object(OpenFESimulator, "_rebuild"),
+            patch("openplaceholder.impl.simulators.execute_DAG") as execute,
+            patch("openplaceholder.impl.simulators.SimulationResults", list),
+        ):
+            execute.return_value = empty
+            results = simulator.simulate(_FakeNetwork(["edge_a"]))
+
+        assert len(results) == 1
