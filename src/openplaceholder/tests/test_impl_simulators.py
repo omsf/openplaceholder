@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -48,10 +49,58 @@ class _FakeTransformation:
         self.mapping = None
 
 
+class _ResultsStub(list):  # type: ignore[type-arg]
+    """Stands in for SimulationResults, which tokenizes its contents on init."""
+
+    def __init__(self, network: object, dag_results: list) -> None:  # type: ignore[type-arg]
+        super().__init__(dag_results)
+        self.network = network
+
+
 class _FakeNetwork:
     def __init__(self, names: list[str], edges: list[tuple[str, str]] | None = None) -> None:
         pairs = edges or [("lig_a", "lig_b")] * len(names)
         self.edges = [_FakeTransformation(n, a, b) for n, (a, b) in zip(names, pairs)]
+
+
+class TestSimulationResults:
+
+    def test_pairs_results_with_the_transformations_that_produced_them(self) -> None:
+        from openplaceholder.core.simulation.simulator import SimulationResults
+
+        class _T:
+            def __init__(self, key: str) -> None:
+                self.key = key
+
+        class _Net:
+            def __init__(self, edges: list[object]) -> None:
+                self.edges = edges
+
+        class _R:
+            def __init__(self, key: str) -> None:
+                self.transformation_key = key
+
+        a, b = _T("k-a"), _T("k-b")
+        # deliberately out of order: the join must be by key, not position
+        results = SimulationResults.__new__(SimulationResults)
+        results.network, results.dag_results = _Net([a, b]), [_R("k-b"), _R("k-a")]
+
+        assert [t for t, _ in results] == [b, a]
+
+    def test_unmatched_result_is_an_error_not_a_silent_skip(self) -> None:
+        from openplaceholder.core.simulation.simulator import SimulationResults
+
+        class _Net:
+            edges: list[object] = []
+
+        class _R:
+            transformation_key = "k-missing"
+
+        results = SimulationResults.__new__(SimulationResults)
+        results.network, results.dag_results = _Net(), [_R()]
+
+        with pytest.raises(KeyError, match="k-missing"):
+            list(results)
 
 
 class TestOpenFESimulator:
@@ -89,7 +138,8 @@ class TestOpenFESimulator:
             patch("openplaceholder.impl.simulators.execute_DAG") as execute,
             # SimulationResults tokenizes its contents on construction, so stand it
             # in with a plain list to keep this test about the execution loop
-            patch("openplaceholder.impl.simulators.SimulationResults", list),
+            patch("openplaceholder.impl.simulators.SimulationResults", _ResultsStub),
+            patch("openplaceholder.impl.simulators.AlchemicalNetwork", lambda edges: list(edges)),
         ):
             execute.return_value = _FakeDAGResult()
             simulator._protocol.gather = lambda _: type("R", (), {"get_estimate": lambda self: 1.0})()
@@ -111,11 +161,12 @@ class TestOpenFESimulator:
         with (
             patch.object(OpenFESimulator, "_rebuild"),
             patch("openplaceholder.impl.simulators.execute_DAG") as execute,
-            patch("openplaceholder.impl.simulators.SimulationResults", list),
+            patch("openplaceholder.impl.simulators.SimulationResults", _ResultsStub),
+            patch("openplaceholder.impl.simulators.AlchemicalNetwork", lambda edges: list(edges)),
         ):
             execute.side_effect = [_FakeDAGResult(ok=False), _FakeDAGResult(ok=True)]
             simulator._protocol.gather = lambda _: type("R", (), {"get_estimate": lambda self: 1.0})()
-            results = simulator.simulate(network)
+            results: Any = simulator.simulate(network)
 
         # the failing edge is recorded rather than aborting the remaining edges
         assert len(results) == 2
@@ -140,7 +191,8 @@ class TestOpenFESimulator:
         with (
             patch.object(OpenFESimulator, "_rebuild"),
             patch("openplaceholder.impl.simulators.execute_DAG") as execute,
-            patch("openplaceholder.impl.simulators.SimulationResults", list),
+            patch("openplaceholder.impl.simulators.SimulationResults", _ResultsStub),
+            patch("openplaceholder.impl.simulators.AlchemicalNetwork", lambda edges: list(edges)),
         ):
             execute.return_value = _FakeDAGResult()
             simulator._protocol.gather = lambda _: type("R", (), {"get_estimate": lambda self: 1.0})()
@@ -162,7 +214,8 @@ class TestOpenFESimulator:
         with (
             patch.object(OpenFESimulator, "_rebuild"),
             patch("openplaceholder.impl.simulators.execute_DAG") as execute,
-            patch("openplaceholder.impl.simulators.SimulationResults", list),
+            patch("openplaceholder.impl.simulators.SimulationResults", _ResultsStub),
+            patch("openplaceholder.impl.simulators.AlchemicalNetwork", lambda edges: list(edges)),
         ):
             execute.side_effect = [bad, _FakeDAGResult(ok=True)]
             simulator._protocol.gather = lambda _: type("R", (), {"get_estimate": lambda self: 1.0})()
@@ -180,7 +233,8 @@ class TestOpenFESimulator:
         with (
             patch.object(OpenFESimulator, "_rebuild"),
             patch("openplaceholder.impl.simulators.execute_DAG") as execute,
-            patch("openplaceholder.impl.simulators.SimulationResults", list),
+            patch("openplaceholder.impl.simulators.SimulationResults", _ResultsStub),
+            patch("openplaceholder.impl.simulators.AlchemicalNetwork", lambda edges: list(edges)),
         ):
             execute.return_value = empty
             results = simulator.simulate(_FakeNetwork(["edge_a"]))

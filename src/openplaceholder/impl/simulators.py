@@ -68,15 +68,21 @@ class OpenFESimulator(Simulator):
         root = Path(self._config.simulation_directory)
 
         dag_results = []
+        executed = []
         # network.edges is a frozenset; sort for a deterministic execution order
         for transformation in sorted(network.edges, key=lambda t: (t.name or "", str(t.key))):
             name = transformation.name or str(transformation.key)
             work_directory = root / name
             work_directory.mkdir(parents=True, exist_ok=True)
 
+            # carries this simulator's protocol, so its key is the one the
+            # results reference and it records the settings that actually ran
+            rebuilt = self._rebuild(transformation)
+            executed.append(rebuilt)
+
             logger.info("running transformation %s", name)
             dag_result = execute_DAG(
-                self._rebuild(transformation).create(),
+                rebuilt.create(),
                 shared_basedir=work_directory,
                 scratch_basedir=work_directory,
                 keep_shared=self._config.keep_shared,
@@ -99,4 +105,4 @@ class OpenFESimulator(Simulator):
                 failures = dag_result.protocol_unit_failures
                 logger.error("%s failed: %s", name, failures[-1].exception if failures else "unknown")
 
-        return SimulationResults(dag_results)
+        return SimulationResults(AlchemicalNetwork(edges=executed), dag_results)
