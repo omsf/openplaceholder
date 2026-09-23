@@ -111,9 +111,11 @@ class ScaffoldRMSDObjective(Objective):
             return mols[0]
         result = rdFMCS.FindMCS(
             mols,
-            timeout=self._config.mcs_timeout,
+            matchValences=False,
             ringMatchesRingOnly=True,
             completeRingsOnly=True,
+            matchChiralTag=False,
+            timeout=self._config.mcs_timeout,
         )
         if result.canceled or not result.smartsString:
             return None
