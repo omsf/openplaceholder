@@ -44,8 +44,9 @@ implementation = "openplaceholder.impl.selector.mpo:MPOSelector"
 # objectives to optimize over, keyed by class name; "weight" sets its weight in
 # the combination, remaining keys are passed to the objective's config
 [selection.selector.objectives]
+ScaffoldRMSDObjective = { weight = 2.0, tolerance = 1.0 }
 VolumeOverlapObjective = { weight = 1.0 }
-IFPSimilarityObjective = { weight = 1.0 }
+IFPSimilarityObjective = { weight = 0.5 }
 
 
 [[assembly.transformations]]
