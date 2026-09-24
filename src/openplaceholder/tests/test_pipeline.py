@@ -8,6 +8,7 @@ from openplaceholder.impl.generator.openfold3 import (
     OpenFold3GeneratorConfig,
 )
 from openplaceholder.impl.mappers import LOMAPMapper
+from openplaceholder.impl.normalizers import BindingSiteAligner
 from openplaceholder.impl.selector.mpo import MPOSelector
 from openplaceholder.impl.transformations import (
     ComplexProtonationTransformation,
@@ -29,6 +30,9 @@ lig_a = "C1=CC=CC=C1"
 
 [[selection.validators]]
 implementation = "openplaceholder.impl.validators:PosebustersValidator"
+
+[[selection.normalizers]]
+implementation = "openplaceholder.impl.normalizers:BindingSiteAligner"
 
 [selection.selector]
 implementation = "openplaceholder.impl.selector.mpo:MPOSelector"
@@ -68,14 +72,16 @@ class TestResolvePipeline:
 
             assert isinstance(pipeline.plugins[1], PosebustersValidator)
 
-            selector = pipeline.plugins[2]
+            assert isinstance(pipeline.plugins[2], BindingSiteAligner)
+
+            selector = pipeline.plugins[3]
             assert isinstance(selector, MPOSelector)
             assert "VolumeOverlapObjective" in selector._config.objectives
 
-            assert isinstance(pipeline.plugins[3], MaxVolumeSiteSubstitutionTransformation)
-            assert isinstance(pipeline.plugins[4], HeavyAtomAdditionTransformation)
-            protonation = pipeline.plugins[5]
+            assert isinstance(pipeline.plugins[4], MaxVolumeSiteSubstitutionTransformation)
+            assert isinstance(pipeline.plugins[5], HeavyAtomAdditionTransformation)
+            protonation = pipeline.plugins[6]
             assert isinstance(protonation, ComplexProtonationTransformation)
             assert protonation._config.ph == 7.0
 
-            assert isinstance(pipeline.plugins[6], LOMAPMapper)
+            assert isinstance(pipeline.plugins[7], LOMAPMapper)

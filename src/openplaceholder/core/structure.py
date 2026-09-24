@@ -189,7 +189,7 @@ class Structure(GufeTokenizable):  # type: ignore
 
         MDAnalysis usually guesses file formats from the suffix of a
         file. Since a ``Structure`` instance holds raw bytes of a
-        structure, the ``Structure.structure_format`` is used in leiu
+        structure, the ``Structure.structure_format`` is used in lieu
         of a file suffix.
 
         This is a cached function.
@@ -197,7 +197,7 @@ class Structure(GufeTokenizable):  # type: ignore
         Returns
         -------
         Universe
-            An MDAnalysis constructed constructed from the
+            An MDAnalysis constructed from the
             ``structure_data`` and ``structure_format``.
 
         Raises
@@ -227,7 +227,7 @@ class Structure(GufeTokenizable):  # type: ignore
         element symbols) and requires explicit hydrogens. Connectivity
         instead comes from RDKit's own distance-based
         ``DetermineConnectivity``, which only needs elements and 3D
-        coordinates. By default (optionally overrided by
+        coordinates. By default (optionally overridden by
         ``selection``) the ligand is everything that isn't
         protein. Any hydrogens it has are kept.
 

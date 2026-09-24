@@ -27,7 +27,7 @@ class JSONArchiver(ArtifactArchiver):
     def _read(self) -> StructureSet:
         path = Path(self._config.path)
         content = path.read_text()
-        logger.debug("loaded achive data from %s", path)
+        logger.debug("loaded archive data from %s", path)
         decoded = GufeTokenizable.from_json(content=content)
         return decoded  # type: ignore
 

@@ -9,6 +9,7 @@ from openplaceholder.core.generation.generator import (
     StructureGenerator,
 )
 from openplaceholder.core.pipeline import Pipeline
+from openplaceholder.core.selection.normalizer import Normalizer
 from openplaceholder.core.selection.selector import Selector
 from openplaceholder.core.selection.validator import Validator
 
@@ -43,6 +44,9 @@ def run_serial(pipeline: Pipeline, initial_data: Any) -> GufeTokenizable:
             case Validator():
                 logger.info("applying validator: %s", plugin.__class__.__name__)
                 data = plugin.validate_structures(data)
+            case Normalizer():
+                logger.info("applying normalizer: %s", plugin.__class__.__name__)
+                data = plugin.normalize(data)
             case Selector():
                 data = plugin.select(data)
             case Transformation():

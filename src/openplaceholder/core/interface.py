@@ -6,12 +6,12 @@ from openplaceholder.core.configuration import ConfigBase
 
 
 class Configurable(ABC):
-    """An abstract class which enforces that enforces attribute annotions.
+    """An abstract class which enforces attribute annotations.
 
     Concrete subclasses of ``Configurable`` are required to have a
-    ``_config`` attribute annotion whose type is a subclass of
+    ``_config`` attribute annotation whose type is a subclass of
     ``ConfigBase``. This provides a compile-time verification that
-    downstream classes conform the a standard set of configure
+    downstream classes conform to a standard set of configuration
     expectations.
 
     """
