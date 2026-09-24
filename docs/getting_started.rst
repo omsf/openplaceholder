@@ -27,6 +27,10 @@ OpenPlaceHolder is designed to provide a declaratively composed pipeline for gen
    [[selection.validators]]
    implementation = "openplaceholder.impl.validators:StereoValidator"
 
+   [[selection.normalizers]]
+   implementation = "openplaceholder.impl.normalizers:BindingSiteAligner"
+   radius = 6.0
+   
    [selection.selector]
    implementation = "openplaceholder.impl.selector.mpo:MPOSelector"
 
