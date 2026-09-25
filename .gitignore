@@ -10,3 +10,6 @@ pixi.lock
 
 # inference trace files
 *.a3m
+
+# documentation artifacts
+docs/_build/*
