@@ -2,8 +2,14 @@ from dataclasses import dataclass
 from enum import IntEnum, auto
 from typing import Any, Iterator, Self
 
+from openplaceholder.core.assembly.mapper import Mapper
+from openplaceholder.core.assembly.transformation import Transformation
+from openplaceholder.core.generation.generator import StructureGenerator
 from openplaceholder.core.interface import Module
 from openplaceholder.core.loader import _build_plugin
+from openplaceholder.core.selection.normalizer import Normalizer
+from openplaceholder.core.selection.selector import Selector
+from openplaceholder.core.selection.validator import Validator
 
 
 class Stage(IntEnum):
@@ -42,6 +48,7 @@ class PipelineResolutionError(Exception):
 
 @dataclass(frozen=True)
 class Pipeline:
+    """Container of configured plugins."""
 
     plugins: tuple[Module, ...]
 
@@ -101,6 +108,56 @@ class Pipeline:
             last_added = stage
 
         return cls(plugins=tuple(plugins))
+
+    def _get_plugin_type[T](self, plugin_type: type[T]) -> tuple[T, ...]:
+        """Collect all plugins that match a certain type."""
+        results: list[T] = []
+        for plugin in self.plugins:
+            if isinstance(plugin, plugin_type):
+                results.append(plugin)
+        return tuple(results)
+
+    @property
+    def generator(self) -> StructureGenerator | None:
+        """The StructureGenerator in the pipeline."""
+        if generator := self._get_plugin_type(StructureGenerator):  # type: ignore[type-abstract]
+            return generator[0]
+        return None
+
+    @property
+    def validators(self) -> tuple[Validator, ...] | None:
+        """The Validator instances in the pipeline."""
+        if validators := self._get_plugin_type(Validator):  # type: ignore[type-abstract]
+            return validators
+        return None
+
+    @property
+    def normalizers(self) -> tuple[Normalizer, ...] | None:
+        """The Normalizer instances in the pipeline."""
+        if normalizers := self._get_plugin_type(Normalizer):  # type: ignore[type-abstract]
+            return normalizers
+        return None
+
+    @property
+    def selector(self) -> Selector | None:
+        """The Selector in the pipeline."""
+        if selector := self._get_plugin_type(Selector):  # type: ignore[type-abstract]
+            return selector[0]
+        return None
+
+    @property
+    def transformations(self) -> tuple[Transformation, ...] | None:
+        """The Transformation instances in the pipeline."""
+        if transformations := self._get_plugin_type(Transformation):  # type: ignore[type-abstract]
+            return transformations
+        return None
+
+    @property
+    def mapper(self) -> Mapper | None:
+        """The Mapper in the pipeline."""
+        if mapper := self._get_plugin_type(Mapper):  # type: ignore[type-abstract]
+            return mapper[0]
+        return None
 
     def __iter__(self) -> Iterator[Module]:
         yield from self.plugins

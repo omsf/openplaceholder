@@ -1,6 +1,7 @@
 import logging
 from typing import Any
 
+from gufe.network import AlchemicalNetwork
 from gufe.tokenization import GufeTokenizable
 
 from openplaceholder.core.assembly.mapper import Mapper
@@ -12,8 +13,48 @@ from openplaceholder.core.pipeline import Pipeline
 from openplaceholder.core.selection.normalizer import Normalizer
 from openplaceholder.core.selection.selector import Selector
 from openplaceholder.core.selection.validator import Validator
+from openplaceholder.core.structure import StructureSeries, StructureSet
 
 logger = logging.getLogger(__name__)
+
+
+def _run_generator(generator_plugin: StructureGenerator) -> StructureSet:
+    """Run a structure generator and return the resulting StructureSet."""
+    logger.info("running generator %s", generator_plugin.__class__.__name__)
+    return generator_plugin.run()
+
+
+def _run_single_validator(validator: Validator, structures: StructureSet) -> StructureSet:
+    """Validate structures using a single validator."""
+    logger.debug("validating structures with %s", validator.__class__.__name__)
+    return validator.validate_structures(structures)
+
+
+def _run_single_normalizer(normalizer: Normalizer, structures: StructureSet) -> StructureSet:
+    """Normalize structures using a single normalizer."""
+    logger.debug("normalizing structures with %s", normalizer.__class__.__name__)
+    return normalizer.normalize(structures)
+
+
+def _run_selector(selector: Selector, structures: StructureSet) -> StructureSeries:
+    """Select the best structures from a StructureSet using the given selector."""
+    logger.info("selecting structures using %s", selector.__class__.__name__)
+    return selector.select(structures)
+
+
+def _run_single_transformation(
+    transformation: Transformation,
+    structures: StructureSeries,
+) -> StructureSeries:
+    """Transform a StructureSeries using the given transformation."""
+    logger.debug("applying transformation %s", transformation.__class__.__name__)
+    return transformation.transform(structures)
+
+
+def _run_mapper(mapper: Mapper, structures: StructureSeries) -> AlchemicalNetwork:
+    """Map a StructureSeries to an AlchemicalNetwork."""
+    logger.info("mapping structures using %s", mapper.__class__.__name__)
+    return mapper.map(structures)
 
 
 def run_serial(pipeline: Pipeline, initial_data: Any) -> GufeTokenizable:
@@ -48,6 +89,7 @@ def run_serial(pipeline: Pipeline, initial_data: Any) -> GufeTokenizable:
                 logger.info("applying normalizer: %s", plugin.__class__.__name__)
                 data = plugin.normalize(data)
             case Selector():
+                logger.info("selecting structure series from structure pool using: %s", plugin.__class__.__name__)
                 data = plugin.select(data)
             case Transformation():
                 logger.info("applying transformation: %s", plugin.__class__.__name__)
@@ -56,4 +98,55 @@ def run_serial(pipeline: Pipeline, initial_data: Any) -> GufeTokenizable:
                 data = plugin.map(data)
             case _:
                 raise TypeError(f"Unrecognized module {plugin}")
+    return data
+
+
+def run_prefect(pipeline: Pipeline, initial_data: Any) -> GufeTokenizable:
+    """Run the pipeline with Prefect orchestration.
+
+    Module run methods are wrapped in Prefect tasks enabling advanced
+    orchestration.
+
+    Parameters
+    ----------
+    pipeline
+        The Pipeline instance to execute.
+    initial_data
+        The first instance of data to be used by a module. The type of
+        this data depends on the first ``Module`` in the pipeline.
+
+    Returns
+    -------
+    The output type of the final module
+
+    """
+
+    from openplaceholder.core.orchestration.prefect_tasks import (
+        map_structures,
+        select_structures,
+        transform_structures,
+        validate_structures,
+    )
+
+    assert pipeline.validators is not None
+    assert pipeline.selector is not None
+    assert pipeline.mapper is not None
+
+    data = validate_structures(pipeline.validators, initial_data)  # type: ignore[var-annotated]
+
+    assert isinstance(data, StructureSet)
+
+    data = select_structures(pipeline.selector, data)
+
+    assert pipeline.transformations is not None
+
+    for transformation in pipeline.transformations:
+        assert isinstance(data, StructureSeries)
+        data = transform_structures(transformation, data)
+
+    assert isinstance(data, StructureSeries)
+    data = map_structures(pipeline.mapper, data)
+
+    assert isinstance(data, GufeTokenizable)
+
     return data
