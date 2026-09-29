@@ -9,7 +9,11 @@ import numpy as np
 from rdkit import Chem
 from rdkit.Chem import rdFMCS
 
-from openplaceholder.core.selection.objective import Objective, ObjectiveConfig
+from openplaceholder.core.selection.objective import (
+    DegenerateObjectiveError,
+    Objective,
+    ObjectiveConfig,
+)
 from openplaceholder.core.structure import Structure
 
 logger = logging.getLogger(__name__)
@@ -80,26 +84,27 @@ class ScaffoldRMSDObjective(Objective):
         smiles = sorted({structure.ligand_smiles for structure in structures})
         core = self._mcs([Chem.MolFromSmiles(s) for s in smiles])
         if core is None:
-            logger.warning("no common scaffold across %d ligands; scores will be 0", len(smiles))
+            self._unusable(f"no common scaffold across {len(smiles)} ligands")
             return None
 
         atoms = core.GetNumAtoms()
         if atoms < self._config.min_core_atoms:
             # diversity can result in tiny MCS - not useful
-            logger.warning(
-                "shared scaffold across %d ligands is only %d atoms (min %d): "
-                "the ligands are too dissimilar for %s to mean anything, so it is "
-                "contributing nothing. Set core_smarts to pin a scaffold, or drop "
-                "this objective for this set.",
-                len(smiles),
-                atoms,
-                self._config.min_core_atoms,
-                type(self).__name__,
+            self._unusable(
+                f"shared scaffold across {len(smiles)} ligands is only {atoms} atoms "
+                f"(min {self._config.min_core_atoms}): the ligands are too dissimilar"
             )
             return None
 
         logger.info("scaffold core: %d atoms across %d ligands", atoms, len(smiles))
         return core
+
+    def _unusable(self, reason: str) -> None:
+        """Report a core this objective cannot work with: raise, or stand down."""
+        advice = "Set core_smarts to pin a scaffold, or drop this objective for this set."
+        if self._config.strict:
+            raise DegenerateObjectiveError(f"{type(self).__name__}: {reason}. {advice}")
+        logger.warning("%s: %s, so it is contributing nothing. %s", type(self).__name__, reason, advice)
 
     def _pair_core(self, a: Structure, b: Structure) -> Chem.Mol | None:
         return self._mcs([Chem.MolFromSmiles(a.ligand_smiles), Chem.MolFromSmiles(b.ligand_smiles)])

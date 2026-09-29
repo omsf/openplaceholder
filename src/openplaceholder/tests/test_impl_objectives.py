@@ -3,6 +3,7 @@ import base64
 import numpy as np
 import pytest
 
+from openplaceholder.core.selection.objective import DegenerateObjectiveError
 from openplaceholder.core.structure import Structure
 from openplaceholder.impl.selector.objectives.ifp import (
     IFPSimilarityObjective,
@@ -151,3 +152,62 @@ class TestScaffoldRMSDObjective:
 
         assert objective._core is not None
         assert objective._core.GetNumAtoms() >= 6
+
+
+class TestStrictMode:
+    """Strict mode turns "this objective cast no vote" into a hard failure."""
+
+    def test_scaffold_raises_on_an_unusable_core(self) -> None:
+        structure = _tyk2_structure()
+        objective = ScaffoldRMSDObjective(ScaffoldRMSDObjectiveConfig(min_core_atoms=500, strict=True))
+
+        with pytest.raises(DegenerateObjectiveError, match="too dissimilar"):
+            objective.matrix([structure, _shifted(structure, 1.0)])
+
+    def test_scaffold_only_warns_when_not_strict(self) -> None:
+        structure = _tyk2_structure()
+        objective = ScaffoldRMSDObjective(ScaffoldRMSDObjectiveConfig(min_core_atoms=500))
+
+        matrix = objective.matrix([structure, _shifted(structure, 1.0)])
+
+        assert (matrix[np.triu_indices(2, k=1)] == 0.0).all()
+
+    def test_volume_raises_when_no_pair_overlaps(self) -> None:
+        structure = _tyk2_structure()
+        # far enough apart that no two hulls intersect, so every pair scores 0
+        pool = [structure, _shifted(structure, 60.0), _shifted(structure, 120.0)]
+        objective = VolumeOverlapObjective(VolumeOverlapObjectiveConfig(strict=True))
+
+        with pytest.raises(DegenerateObjectiveError, match="discriminate"):
+            objective.matrix(pool)
+
+    def test_volume_is_silent_when_not_strict(self) -> None:
+        structure = _tyk2_structure()
+        pool = [structure, _shifted(structure, 60.0), _shifted(structure, 120.0)]
+
+        matrix = VolumeOverlapObjective(VolumeOverlapObjectiveConfig()).matrix(pool)
+
+        assert (matrix[np.triu_indices(3, k=1)] == 0.0).all()
+
+    def test_ifp_raises_when_no_contacts_are_shared(self) -> None:
+        structure = _tyk2_structure()
+        # pulled clear of the protein, so no pose makes any contact
+        pool = [_shifted(structure, 60.0), _shifted(structure, 120.0)]
+        objective = IFPSimilarityObjective(IFPSimilarityObjectiveConfig(strict=True))
+
+        with pytest.raises(DegenerateObjectiveError, match="discriminate"):
+            objective.matrix(pool)
+
+    def test_a_discriminating_objective_passes_strict(self) -> None:
+        structure = _tyk2_structure()
+        pool = [structure, _shifted(structure, 0.5), _shifted(structure, 2.0)]
+        objective = ScaffoldRMSDObjective(ScaffoldRMSDObjectiveConfig(strict=True))
+
+        matrix = objective.matrix(pool)
+
+        assert len(set(matrix[np.triu_indices(3, k=1)].round(6))) > 1
+
+    def test_single_structure_pool_is_not_treated_as_degenerate(self) -> None:
+        objective = ScaffoldRMSDObjective(ScaffoldRMSDObjectiveConfig(strict=True))
+
+        assert objective.matrix([_tyk2_structure()]).shape == (1, 1)

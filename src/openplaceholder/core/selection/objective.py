@@ -25,9 +25,14 @@ def get_objective(name: str) -> "type[Objective]":
         raise KeyError(f"Unknown objective '{name}'. Registered: {known}")
 
 
+class DegenerateObjectiveError(Exception):
+    """To be raised when an objective cannot discriminate between candidates."""
+
+
 @dataclass(frozen=True, eq=True)
 class ObjectiveConfig:
-    pass
+    # raise rather than contribute a flat matrix the optimizer cannot use
+    strict: bool = False
 
 
 class Objective(ABC):
@@ -62,4 +67,17 @@ class Objective(ABC):
         for i in range(n):
             for j in range(i + 1, n):
                 scores[i, j] = scores[j, i] = self.score(structures[i], structures[j])
+        self._check_discriminates(scores)
         return scores
+
+    def _check_discriminates(self, scores: np.ndarray) -> None:
+        """Under ``strict``, refuse a matrix that ranks every pair the same."""
+        if not self._config.strict or scores.shape[0] < 2:
+            return
+        off_diagonal = scores[~np.eye(scores.shape[0], dtype=bool)]
+        if np.allclose(off_diagonal, off_diagonal[0]):
+            raise DegenerateObjectiveError(
+                f"{type(self).__name__} scored every pair {off_diagonal[0]:.3g}; it cannot "
+                "discriminate between candidates. Check the objective's settings and inputs, "
+                "or drop it from the selector for this set."
+            )
