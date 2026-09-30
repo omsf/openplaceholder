@@ -34,7 +34,7 @@ class DisconnectedNetworkError(Exception):
 
 
 def _ligand_names(system: ChemicalSystem) -> set[str]:
-    return {c.name for c in system.components.values() if isinstance(c, SmallMoleculeComponent)}
+    return {c.name for c in system.get_component_by_type(SmallMoleculeComponent)}
 
 
 def _ligand_components(network: AlchemicalNetwork) -> list[set[str]]:
