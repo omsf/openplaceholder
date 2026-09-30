@@ -107,7 +107,7 @@ class TestSimulationResults:
         assert len(results) == 0
         assert results.ok() is False
 
-    def test_unmatched_result_is_an_error_not_a_silent_skip(self) -> None:
+    def test_unmatched_result_raises(self) -> None:
         from openplaceholder.core.simulation.simulator import SimulationResults
 
         class _Net:
