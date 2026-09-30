@@ -1,6 +1,6 @@
-from gufe.tokenization import GufeTokenizable
 from prefect import flow
 
+from openplaceholder.core.io import DataRef
 from openplaceholder.core.orchestration.prefect_tasks import (
     generate_task,
     generate_validate_task,
@@ -15,7 +15,7 @@ from openplaceholder.core.structure import StructureSeries, StructureSet
 
 
 @flow(name="openplaceholder-pipeline")
-def run_prefect(pipeline: Pipeline, initial_data: GufeTokenizable | None = None) -> GufeTokenizable:
+def run_prefect(pipeline: Pipeline, initial_data: DataRef | None = None) -> DataRef:  # type: ignore[type-arg]
     """Prefect flow for executing an entire OPH workflow.
 
     Parameters
@@ -42,43 +42,44 @@ def run_prefect(pipeline: Pipeline, initial_data: GufeTokenizable | None = None)
     validators = pipeline.validators
 
     if generator is None and validators is None:
-        data = initial_data
+        if initial_data is None:
+            raise ValueError("Initial data must be provided for steps after generation")
     # only generate, don't validate
     elif generator is not None and validators is None:
-        data = generate_task(generator)
+        data: DataRef[StructureSet] = generate_task.submit(generator).result()
         return data
-    # pre-generated data
+    # pre-generated data, still needs validation
     elif generator is None and validators is not None:
-        data = initial_data
-        if not isinstance(data, StructureSet):
-            raise TypeError
-        data = validate_structures(validators, data)
+        if initial_data is None:
+            raise ValueError("Initial data must be provided for steps after generation")
+        if initial_data.object_type is not StructureSet:
+            raise TypeError(
+                f"Initial data has incompatible type. Expected StructureSet, found {initial_data.object_type}"
+            )
+        data = validate_structures.submit(validators, initial_data).result()
     # generate and validate
     elif generator is not None and validators is not None:
-        data = generate_validate_task(generator, validators)
+        data = generate_validate_task.submit(generator, validators).result()
 
     if normalizers := pipeline.normalizers:
-        if not isinstance(data, StructureSet):
+        if data.object_type is not StructureSet:
             raise TypeError
-        data = normalize_structures(normalizers, data)
+        data = normalize_structures.submit(normalizers, data).result()
 
     if selector := pipeline.selector:
-        if not isinstance(data, StructureSet):
+        if data.object_type is not StructureSet:
             raise TypeError
-        data = select_structures(selector, data)
+        data = select_structures.submit(selector, data).result()
 
     if transformations := pipeline.transformations:
         for transformation in transformations:
-            if not isinstance(data, StructureSeries):
+            if data.object_type is not StructureSeries:
                 raise TypeError
-            data = transform_structures(transformation, data)
+            data = transform_structures.submit(transformation, data).result()
 
     if mapper := pipeline.mapper:
-        if not isinstance(data, StructureSeries):
+        if data.object_type is not StructureSeries:
             raise TypeError
-        data = map_structures(mapper, data)
-
-    if not isinstance(data, GufeTokenizable):
-        raise TypeError
+        data = map_structures.submit(mapper, data).result()
 
     return data

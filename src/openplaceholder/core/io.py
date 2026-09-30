@@ -1,15 +1,33 @@
 from __future__ import annotations
 
 import importlib
+from enum import StrEnum, auto
 from pathlib import Path
-from typing import Any, Self, Protocol
+from typing import Any, Protocol, Self
 from urllib.parse import urlparse
 
 from gufe.tokenization import GufeKey, GufeTokenizable
 
 
+class DataRefSupportedSchemes(StrEnum):
+    FILE = auto()
+
+
 def get_gufe_data[T: GufeTokenizable](data_ref: DataRef[T]) -> T | None:
-    """From a DataRef, get the data it points to."""
+    """From a ``DataRef``, get the data it points to.
+
+    Parameters
+    ----------
+    data_ref
+        The ``DataRef`` holding the object location and key.
+
+    Returns
+    -------
+    An instance of the ``GufeTokenizable`` the ``DataRef``
+    references. If the object could not be found, ``None`` is
+    returned.
+
+    """
 
     parsed = urlparse(data_ref.location)
 
@@ -27,22 +45,28 @@ def get_gufe_data[T: GufeTokenizable](data_ref: DataRef[T]) -> T | None:
 
             return obj
         case _:
-            raise TypeError
+            raise AttributeError
 
-
-def write_disk[T: GufeTokenizable](write_location: str, tokenizable: T) -> DataRef[T] | None:
-    """Write a GufeTokenizable to disk."""
-    output_path = Path(write_location)
-    tokenizable.to_json(output_path)
-    return DataRef(f"file:{output_path.absolute()}", tokenizable.key, tokenizable.__class__)
-
-class TokenizableReader(Protocol):
-
-    def read[T: GufeTokenizable](self, reference: DataRef[T]) -> T | None: ...
 
 class TokenizableWriter(Protocol):
 
     def write[T: GufeTokenizable](self, tokenizable: T) -> DataRef[T] | None: ...
+
+
+class FSDataRefIO:
+
+    # TODO: support automatic naming?
+    def __init__(self, location: str):
+        self.location = Path(location).resolve().as_uri()
+
+    def write[T: GufeTokenizable](self, tokenizable: T) -> DataRef[T] | None:
+        path = Path(urlparse(self.location).path)
+        path.parent.mkdir(exist_ok=True, parents=True)
+        try:
+            tokenizable.to_json(path)
+        except Exception:
+            return None
+        return DataRef(self.location, tokenizable.key, tokenizable.__class__)
 
 
 class DataRef[T: GufeTokenizable](GufeTokenizable):  # type: ignore
@@ -54,6 +78,19 @@ class DataRef[T: GufeTokenizable](GufeTokenizable):  # type: ignore
         self.location = location
         self.object_key = object_key
         self.object_type = object_type
+
+        self._validate_uri()
+
+    def _validate_uri(self) -> None:
+        from urllib.parse import urlparse
+
+        result = urlparse(self.location)
+
+        if result.scheme == "":
+            raise ValueError("DataRef URI does not provide a scheme")
+
+        if result.scheme not in DataRefSupportedSchemes.__members__:
+            raise ValueError("DataRef provides an unsupported URI")
 
     def get_data(self) -> T | None:
         return get_gufe_data(self)
