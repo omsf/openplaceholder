@@ -113,7 +113,7 @@ def run(config: Path, begin: str | None, end: str | None, input: Path | None, ou
 
     config_map = load_toml(config)
 
-    partial = (first, last) != (Stage.GENERATOR, Stage.MAPPER)
+    partial = (first, last) != (Stage.GENERATOR, Stage.SIMULATOR)
     pipeline = Pipeline.from_config_map(config_map, allow_partial=partial, lower=first, upper=last)
     result: GufeTokenizable = run_serial(pipeline, data)
     result.to_json(output)
