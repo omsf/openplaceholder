@@ -85,7 +85,9 @@ class SimulationResults(GufeTokenizable):  # type: ignore
 
     def ok(self) -> bool:
         """Whether every transformation completed without failures."""
-        return bool(self.dag_results) and all(result.ok() for result in self.dag_results)
+        if len(self.dag_results) > 0:
+            return all(result.ok() for result in self.dag_results)
+        return False
 
 
 class Simulator(Module, ABC):
