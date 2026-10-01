@@ -54,23 +54,18 @@ def _ligand_components(network: AlchemicalNetwork) -> list[set[str]]:
 
 
 class SimulationResults(GufeTokenizable):  # type: ignore
-    """The executed ProtocolDAGs of an AlchemicalNetwork, with the network as run."""
+    """Each transformation as it was executed, paired with its result."""
 
-    def __init__(self, network: AlchemicalNetwork, dag_results: list[ProtocolDAGResult]):
-        self.network = network
-        self.dag_results = dag_results
+    def __init__(self, results: list[list[Any]]):
+        self.results = results
 
     def __iter__(self) -> Iterator[tuple[Any, ProtocolDAGResult]]:
-        """``(transformation, result)`` pairs, joined on ``transformation_key``."""
-        by_key = {transformation.key: transformation for transformation in self.network.edges}
-        for dag_result in self.dag_results:
-            transformation = by_key.get(dag_result.transformation_key)
-            if transformation is None:
-                raise KeyError(f"no transformation in the network matches {dag_result.transformation_key}")
+        """``(transformation, result)`` pairs, in execution order."""
+        for transformation, dag_result in self.results:
             yield transformation, dag_result
 
     def _to_dict(self) -> dict[Any, Any]:
-        return {"network": self.network, "dag_results": self.dag_results}
+        return {"results": self.results}
 
     @classmethod
     def _from_dict(cls, dct: dict[Any, Any]) -> Self:
@@ -81,12 +76,12 @@ class SimulationResults(GufeTokenizable):  # type: ignore
         return {}
 
     def __len__(self) -> int:
-        return len(self.dag_results)
+        return len(self.results)
 
     def ok(self) -> bool:
         """Whether every transformation completed without failures."""
-        if len(self.dag_results) > 0:
-            return all(result.ok() for result in self.dag_results)
+        if len(self.results) > 0:
+            return all(dag_result.ok() for _, dag_result in self.results)
         return False
 
 

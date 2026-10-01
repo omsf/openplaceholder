@@ -76,6 +76,10 @@ def _executes(ok: bool = True, failures: bool = True) -> object:
     return lambda dag, **kwargs: _dag_result(dag, ok=ok, failures=failures)
 
 
+def _results(*transformations: Transformation, ok: bool = True) -> SimulationResults:
+    return SimulationResults([[t, _dag_result(t.create(), ok=ok)] for t in transformations])
+
+
 def _simulator(tmp_path: Path, production_length_ns: float = 5.0) -> OpenFESimulator:
     return OpenFESimulator(
         OpenFESimulatorConfig(simulation_directory=tmp_path, production_length_ns=production_length_ns)
@@ -86,29 +90,20 @@ class TestSimulationResults:
 
     def test_pairs_each_result_with_the_transformation_that_produced_it(self) -> None:
         a, b = _transformation("a", b="lig_b"), _transformation("b", a="lig_b", b="lig_c")
-        results = [_dag_result(b.create()), _dag_result(a.create())]  # deliberately out of order
 
-        paired = list(SimulationResults(AlchemicalNetwork(edges=[a, b]), results))
+        paired = list(_results(b, a))  # pairing is explicit, so order is preserved
 
         assert [transformation.name for transformation, _ in paired] == ["b", "a"]
-
-    def test_unmatched_result_raises(self) -> None:
-        a, orphan = _transformation("a"), _transformation("orphan", a="lig_x", b="lig_y")
-        results = SimulationResults(AlchemicalNetwork(edges=[a]), [_dag_result(orphan.create())])
-
-        with pytest.raises(KeyError, match="no transformation"):
-            list(results)
 
     def test_ok_requires_results(self) -> None:
         a = _transformation("a")
 
-        assert SimulationResults(AlchemicalNetwork(edges=[a]), [_dag_result(a.create())]).ok()
-        assert not SimulationResults(AlchemicalNetwork(), []).ok()
-        assert not SimulationResults(AlchemicalNetwork(edges=[a]), [_dag_result(a.create(), ok=False)]).ok()
+        assert _results(a).ok()
+        assert not SimulationResults([]).ok()
+        assert not _results(a, ok=False).ok()
 
     def test_round_trips_through_json(self) -> None:
-        a = _transformation("a")
-        results = SimulationResults(AlchemicalNetwork(edges=[a]), [_dag_result(a.create())])
+        results = _results(_transformation("a"))
 
         restored = SimulationResults.from_json(content=results.to_json())
 
@@ -221,7 +216,6 @@ class TestOpenFESimulator:
 
         # only the edge that ran is recorded, and network/results stay 1:1
         assert len(results) == 1
-        assert len(results.network.edges) == 1
         assert not (tmp_path / "edge_a" / "dag_result.json").exists()
         assert (tmp_path / "edge_b" / "dag_result.json").is_file()
 
