@@ -58,14 +58,9 @@ class OpenFESimulator(Simulator):
         return settings
 
     def _rebuild(self, transformation: GufeTransformation) -> GufeTransformation:
-        """Swap in this simulator's protocol, leaving the chemistry untouched."""
-        return GufeTransformation(
-            stateA=transformation.stateA,
-            stateB=transformation.stateB,
-            protocol=self._protocol,
-            mapping=transformation.mapping,
-            name=transformation.name,
-        )
+        """Swap in this simulator's protocol, leaving everything else untouched."""
+        rebuilt: GufeTransformation = transformation.copy_with_replacements(protocol=self._protocol)
+        return rebuilt
 
     def _validate(self, network: AlchemicalNetwork) -> None:
         """Reject networks this simulator would otherwise run incorrectly."""

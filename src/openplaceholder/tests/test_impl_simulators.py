@@ -246,3 +246,22 @@ class TestOpenFESimulator:
     def test_simulate_transformation_returns_none_when_it_cannot_start(self, tmp_path: Path) -> None:
         with patch("openplaceholder.impl.simulators.execute_DAG", side_effect=OSError("disk full")):
             assert _simulator(tmp_path).simulate_transformation(_transformation("edge_a")) is None
+
+    def test_rebuild_keeps_everything_but_the_protocol(self, tmp_path: Path) -> None:
+        """Hand-copying fields silently drops any gufe adds, metadata included."""
+        original = _transformation("edge_a")
+        annotated = Transformation(
+            stateA=original.stateA,
+            stateB=original.stateB,
+            protocol=original.protocol,
+            mapping=original.mapping,
+            name=original.name,
+            metadata={"provenance": "cofolded"},
+        )
+
+        rebuilt = _simulator(tmp_path, production_length_ns=0.5)._rebuild(annotated)
+
+        assert rebuilt.metadata == annotated.metadata
+        assert rebuilt.name == annotated.name
+        assert rebuilt.stateA == annotated.stateA
+        assert rebuilt.protocol.settings.simulation_settings.production_length == (0.5 * unit.nanoseconds)
