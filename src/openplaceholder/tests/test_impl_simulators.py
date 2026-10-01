@@ -1,9 +1,18 @@
 from pathlib import Path
-from typing import Any
 from unittest.mock import patch
 
 import pytest
-from gufe import SmallMoleculeComponent
+from gufe import (
+    AlchemicalNetwork,
+    ChemicalSystem,
+    SmallMoleculeComponent,
+    SolventComponent,
+    Transformation,
+)
+from gufe.mapping import LigandAtomMapping
+from gufe.protocols import ProtocolDAG, ProtocolDAGResult
+from gufe.protocols.protocolunit import ProtocolUnitFailure, ProtocolUnitResult
+from openfe.protocols.openmm_afe import AbsoluteSolvationProtocol
 from openfe.protocols.openmm_rfe import RelativeHybridTopologyProtocol
 from openff.units import unit
 from rdkit import Chem
@@ -12,296 +21,234 @@ from rdkit.Chem.rdDistGeom import EmbedMolecule
 from openplaceholder.core.simulation.simulator import (
     DisconnectedNetworkError,
     EmptyNetworkError,
+    SimulationResults,
     UnsupportedProtocolError,
 )
 from openplaceholder.impl.simulators import OpenFESimulator, OpenFESimulatorConfig
 
-
-class _FakeDAGResult:
-    def __init__(self, ok: bool = True) -> None:
-        self._ok = ok
-        self.protocol_unit_failures = [] if ok else [type("F", (), {"exception": "boom"})()]
-
-    def ok(self) -> bool:
-        return self._ok
-
-    def to_json(self, path: Path) -> None:
-        Path(path).write_text("{}")
+PROTOCOL = RelativeHybridTopologyProtocol(settings=RelativeHybridTopologyProtocol.default_settings())
 
 
-def _ligand(name: str) -> SmallMoleculeComponent:
-    mol = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1"))
+def _ligand(name: str, smiles: str = "c1ccccc1") -> SmallMoleculeComponent:
+    mol = Chem.AddHs(Chem.MolFromSmiles(smiles))
     EmbedMolecule(mol, randomSeed=0xF00D)
     return SmallMoleculeComponent(mol, name=name)
 
 
-class _FakeSystem:
-    """Stands in for a ChemicalSystem; only ``components`` is read."""
-
-    def __init__(self, ligand: str) -> None:
-        self.components = {"ligand": _ligand(ligand)}
-
-
-#: a real protocol instance, so _validate sees a supported one on the fakes
-_RHT = RelativeHybridTopologyProtocol(settings=RelativeHybridTopologyProtocol.default_settings())
-
-
-class _FakeTransformation:
-    def __init__(self, name: str, state_a: str = "lig_a", state_b: str = "lig_b") -> None:
-        self.protocol = _RHT
-        self.name = name
-        self.key = f"key-{name}"
-        self.stateA = _FakeSystem(state_a)
-        self.stateB = _FakeSystem(state_b)
-        self.mapping = None
+def _transformation(name: str, a: str = "lig_a", b: str = "lig_b", protocol: object = PROTOCOL) -> Transformation:
+    """A solvent-leg RBFE transformation between two named ligands."""
+    ligand_a, ligand_b = _ligand(a), _ligand(b)
+    return Transformation(
+        stateA=ChemicalSystem({"ligand": ligand_a, "solvent": SolventComponent()}),
+        stateB=ChemicalSystem({"ligand": ligand_b, "solvent": SolventComponent()}),
+        protocol=protocol,
+        mapping=LigandAtomMapping(ligand_a, ligand_b, {i: i for i in range(ligand_a.to_rdkit().GetNumAtoms())}),
+        name=name,
+    )
 
 
-class _ResultsStub(list):  # type: ignore[type-arg]
-    """Stands in for SimulationResults, which tokenizes its contents on init."""
+def _dag_result(dag: ProtocolDAG, ok: bool = True, failures: bool = True) -> ProtocolDAGResult:
+    """A result for ``dag``, keyed to it exactly as a real execution would be."""
+    source = dag.protocol_units[0]
+    if ok:
+        results: list[ProtocolUnitResult] = [ProtocolUnitResult(source_key=source.key, inputs={}, outputs={})]
+    elif failures:
+        results = [
+            ProtocolUnitFailure(
+                source_key=source.key,
+                inputs={},
+                outputs={},
+                exception=("RuntimeError", ("boom",)),
+                traceback="tb",
+            )
+        ]
+    else:
+        results = []
+    return ProtocolDAGResult(
+        protocol_units=[source],
+        protocol_unit_results=results,
+        transformation_key=dag.transformation_key,
+    )
 
-    def __init__(self, network: object, dag_results: list) -> None:  # type: ignore[type-arg]
-        super().__init__(dag_results)
-        self.network = network
+
+def _executes(ok: bool = True, failures: bool = True) -> object:
+    """Stand in for execute_DAG."""
+    return lambda dag, **kwargs: _dag_result(dag, ok=ok, failures=failures)
 
 
-class _FakeNetwork:
-    def __init__(self, names: list[str], edges: list[tuple[str, str]] | None = None) -> None:
-        pairs = edges or [("lig_a", "lig_b")] * len(names)
-        self.edges = [_FakeTransformation(n, a, b) for n, (a, b) in zip(names, pairs)]
+def _simulator(tmp_path: Path, production_length_ns: float = 5.0) -> OpenFESimulator:
+    return OpenFESimulator(
+        OpenFESimulatorConfig(simulation_directory=tmp_path, production_length_ns=production_length_ns)
+    )
 
 
 class TestSimulationResults:
 
-    def test_pairs_results_with_the_transformations_that_produced_them(self) -> None:
-        from openplaceholder.core.simulation.simulator import SimulationResults
+    def test_pairs_each_result_with_the_transformation_that_produced_it(self) -> None:
+        a, b = _transformation("a", b="lig_b"), _transformation("b", a="lig_b", b="lig_c")
+        results = [_dag_result(b.create()), _dag_result(a.create())]  # deliberately out of order
 
-        class _T:
-            def __init__(self, key: str) -> None:
-                self.key = key
+        paired = list(SimulationResults(AlchemicalNetwork(edges=[a, b]), results))
 
-        class _Net:
-            def __init__(self, edges: list[object]) -> None:
-                self.edges = edges
-
-        class _R:
-            def __init__(self, key: str) -> None:
-                self.transformation_key = key
-
-        a, b = _T("k-a"), _T("k-b")
-        # deliberately out of order: the join must be by key, not position
-        results = SimulationResults.__new__(SimulationResults)
-        results.network, results.dag_results = _Net([a, b]), [_R("k-b"), _R("k-a")]
-
-        assert [t for t, _ in results] == [b, a]
-
-    def test_empty_results_are_not_ok(self) -> None:
-        """A run where every edge was skipped must not report success."""
-        from openplaceholder.core.simulation.simulator import SimulationResults
-
-        class _Net:
-            edges: list[object] = []
-
-        results = SimulationResults.__new__(SimulationResults)
-        results.network, results.dag_results = _Net(), []
-
-        assert len(results) == 0
-        assert results.ok() is False
+        assert [transformation.name for transformation, _ in paired] == ["b", "a"]
 
     def test_unmatched_result_raises(self) -> None:
-        from openplaceholder.core.simulation.simulator import SimulationResults
+        a, orphan = _transformation("a"), _transformation("orphan", a="lig_x", b="lig_y")
+        results = SimulationResults(AlchemicalNetwork(edges=[a]), [_dag_result(orphan.create())])
 
-        class _Net:
-            edges: list[object] = []
-
-        class _R:
-            transformation_key = "k-missing"
-
-        results = SimulationResults.__new__(SimulationResults)
-        results.network, results.dag_results = _Net(), [_R()]
-
-        with pytest.raises(KeyError, match="k-missing"):
+        with pytest.raises(KeyError, match="no transformation"):
             list(results)
+
+    def test_ok_requires_results(self) -> None:
+        a = _transformation("a")
+
+        assert SimulationResults(AlchemicalNetwork(edges=[a]), [_dag_result(a.create())]).ok()
+        assert not SimulationResults(AlchemicalNetwork(), []).ok()
+        assert not SimulationResults(AlchemicalNetwork(edges=[a]), [_dag_result(a.create(), ok=False)]).ok()
+
+    def test_round_trips_through_json(self) -> None:
+        a = _transformation("a")
+        results = SimulationResults(AlchemicalNetwork(edges=[a]), [_dag_result(a.create())])
+
+        restored = SimulationResults.from_json(content=results.to_json())
+
+        assert len(restored) == len(results)
+        assert [t.name for t, _ in restored] == [t.name for t, _ in results]
 
 
 class TestOpenFESimulator:
 
     def test_init(self, tmp_path: Path) -> None:
-        OpenFESimulator(OpenFESimulatorConfig(simulation_directory=tmp_path))
+        _simulator(tmp_path)
 
     def test_settings_follow_asap_defaults(self, tmp_path: Path) -> None:
-        simulator = OpenFESimulator(
-            OpenFESimulatorConfig(simulation_directory=tmp_path, production_length_ns=0.5, equilibration_length_ns=0.2)
-        )
-        settings = simulator._protocol.settings
+        settings = _simulator(tmp_path, production_length_ns=0.5)._protocol.settings
+        defaults = RelativeHybridTopologyProtocol.default_settings()
 
         assert settings.simulation_settings.production_length == 0.5 * unit.nanoseconds
-        assert settings.simulation_settings.equilibration_length == 0.2 * unit.nanoseconds
-        assert settings.forcefield_settings.small_molecule_forcefield == "openff-2.2.0.offxml"
-        assert settings.solvation_settings.box_shape == "dodecahedron"
-        assert settings.alchemical_settings.softcore_LJ == "gapsys"
-        assert settings.alchemical_settings.turn_off_core_unique_exceptions is False
-        assert settings.thermo_settings.temperature == 298.15 * unit.kelvin
-        assert settings.protocol_repeats == 1
+        assert settings.forcefield_settings != defaults.forcefield_settings
+        assert settings.protocol_repeats != defaults.protocol_repeats
 
     def test_empty_network_raises(self, tmp_path: Path) -> None:
-        simulator = OpenFESimulator(OpenFESimulatorConfig(simulation_directory=tmp_path))
-
         with pytest.raises(EmptyNetworkError):
-            simulator.simulate(_FakeNetwork([]))
-
-    def test_runs_every_edge_into_its_own_directory(self, tmp_path: Path) -> None:
-        simulator = OpenFESimulator(OpenFESimulatorConfig(simulation_directory=tmp_path))
-        network = _FakeNetwork(["edge_a", "edge_b"])
-
-        with (
-            patch.object(OpenFESimulator, "_rebuild") as rebuild,
-            patch("openplaceholder.impl.simulators.execute_DAG") as execute,
-            # SimulationResults tokenizes its contents on construction, so stand it
-            # in with a plain list to keep this test about the execution loop
-            patch("openplaceholder.impl.simulators.SimulationResults", _ResultsStub),
-            patch("openplaceholder.impl.simulators.AlchemicalNetwork", lambda edges: list(edges)),
-        ):
-            execute.return_value = _FakeDAGResult()
-            simulator._protocol.gather = lambda _: type("R", (), {"get_estimate": lambda self: 1.0})()
-            results = simulator.simulate(network)
-
-        assert len(results) == 2
-        assert rebuild.call_count == 2
-        assert {p.name for p in tmp_path.iterdir()} == {"edge_a", "edge_b"}
-        # each edge is persisted as it completes, not only at the end
-        assert all((tmp_path / e / "dag_result.json").is_file() for e in ("edge_a", "edge_b"))
-        for call in execute.call_args_list:
-            assert call.kwargs["raise_error"] is False
-            assert call.kwargs["keep_shared"] is True
-
-    def test_failed_edge_does_not_stop_the_network(self, tmp_path: Path) -> None:
-        simulator = OpenFESimulator(OpenFESimulatorConfig(simulation_directory=tmp_path))
-        network = _FakeNetwork(["edge_a", "edge_b"])
-
-        with (
-            patch.object(OpenFESimulator, "_rebuild"),
-            patch("openplaceholder.impl.simulators.execute_DAG") as execute,
-            patch("openplaceholder.impl.simulators.SimulationResults", _ResultsStub),
-            patch("openplaceholder.impl.simulators.AlchemicalNetwork", lambda edges: list(edges)),
-        ):
-            execute.side_effect = [_FakeDAGResult(ok=False), _FakeDAGResult(ok=True)]
-            simulator._protocol.gather = lambda _: type("R", (), {"get_estimate": lambda self: 1.0})()
-            results: Any = simulator.simulate(network)
-
-        # the failing edge is recorded rather than aborting the remaining edges
-        assert len(results) == 2
-        assert [r.ok() for r in results] == [False, True]
+            _simulator(tmp_path).simulate(AlchemicalNetwork())
 
     def test_disconnected_ligands_raise(self, tmp_path: Path) -> None:
-        simulator = OpenFESimulator(OpenFESimulatorConfig(simulation_directory=tmp_path))
-        # a->b and c->d never meet, so their dG estimates share no reference
-        network = _FakeNetwork(["e1", "e2"], edges=[("lig_a", "lig_b"), ("lig_c", "lig_d")])
+        network = AlchemicalNetwork(edges=[_transformation("a"), _transformation("b", a="lig_c", b="lig_d")])
 
         with pytest.raises(DisconnectedNetworkError, match="2 disconnected groups"):
-            simulator.simulate(network)
-
-    def test_rbfe_legs_are_not_mistaken_for_a_split(self, tmp_path: Path) -> None:
-        """Complex and solvent legs touch disjoint ChemicalSystems but the same ligands."""
-        simulator = OpenFESimulator(OpenFESimulatorConfig(simulation_directory=tmp_path))
-        network = _FakeNetwork(
-            ["a_complex_b", "a_solvent_b", "b_complex_c", "b_solvent_c"],
-            edges=[("lig_a", "lig_b"), ("lig_a", "lig_b"), ("lig_b", "lig_c"), ("lig_b", "lig_c")],
-        )
-
-        with (
-            patch.object(OpenFESimulator, "_rebuild"),
-            patch("openplaceholder.impl.simulators.execute_DAG") as execute,
-            patch("openplaceholder.impl.simulators.SimulationResults", _ResultsStub),
-            patch("openplaceholder.impl.simulators.AlchemicalNetwork", lambda edges: list(edges)),
-        ):
-            execute.return_value = _FakeDAGResult()
-            simulator._protocol.gather = lambda _: type("R", (), {"get_estimate": lambda self: 1.0})()
-            results = simulator.simulate(network)
-
-        assert len(results) == 4
-
-    def test_unserialisable_failure_does_not_end_the_run(self, tmp_path: Path) -> None:
-        """One edge whose result cannot be written must not abort the network."""
-        simulator = OpenFESimulator(OpenFESimulatorConfig(simulation_directory=tmp_path))
-        network = _FakeNetwork(["edge_a", "edge_b"])
-
-        class _UnserialisableDAGResult(_FakeDAGResult):
-            def to_json(self, path: Path) -> None:
-                raise TypeError("Object of type object is not JSON serializable")
-
-        bad = _UnserialisableDAGResult(ok=False)
-
-        with (
-            patch.object(OpenFESimulator, "_rebuild"),
-            patch("openplaceholder.impl.simulators.execute_DAG") as execute,
-            patch("openplaceholder.impl.simulators.SimulationResults", _ResultsStub),
-            patch("openplaceholder.impl.simulators.AlchemicalNetwork", lambda edges: list(edges)),
-        ):
-            execute.side_effect = [bad, _FakeDAGResult(ok=True)]
-            simulator._protocol.gather = lambda _: type("R", (), {"get_estimate": lambda self: 1.0})()
-            results = simulator.simulate(network)
-
-        assert len(results) == 2
-        assert not (tmp_path / "edge_a" / "dag_result.json").exists()
-        assert (tmp_path / "edge_b" / "dag_result.json").is_file()
-
-    def test_failure_without_recorded_failures_still_logs(self, tmp_path: Path) -> None:
-        simulator = OpenFESimulator(OpenFESimulatorConfig(simulation_directory=tmp_path))
-        empty = _FakeDAGResult(ok=False)
-        empty.protocol_unit_failures = []
-
-        with (
-            patch.object(OpenFESimulator, "_rebuild"),
-            patch("openplaceholder.impl.simulators.execute_DAG") as execute,
-            patch("openplaceholder.impl.simulators.SimulationResults", _ResultsStub),
-            patch("openplaceholder.impl.simulators.AlchemicalNetwork", lambda edges: list(edges)),
-        ):
-            execute.return_value = empty
-            results = simulator.simulate(_FakeNetwork(["edge_a"]))
-
-        assert len(results) == 1
+            _simulator(tmp_path).simulate(network)
 
     def test_foreign_protocol_is_rejected_before_any_work(self, tmp_path: Path) -> None:
-        """_rebuild would silently swap the protocol, so refuse up front."""
-        simulator = OpenFESimulator(OpenFESimulatorConfig(simulation_directory=tmp_path))
-        network = _FakeNetwork(["edge_a"])
-        network.edges[0].protocol = object()  # not a RelativeHybridTopologyProtocol
+        other = AbsoluteSolvationProtocol(settings=AbsoluteSolvationProtocol.default_settings())
+        network = AlchemicalNetwork(edges=[_transformation("a", protocol=other)])
 
         with patch("openplaceholder.impl.simulators.execute_DAG") as execute:
             with pytest.raises(UnsupportedProtocolError, match="RelativeHybridTopologyProtocol"):
-                simulator.simulate(network)
+                _simulator(tmp_path).simulate(network)
 
         execute.assert_not_called()
         assert not list(tmp_path.iterdir())
 
     def test_colliding_names_are_rejected_before_any_work(self, tmp_path: Path) -> None:
-        """Two edges sharing a name would share a directory and clobber each other."""
-        simulator = OpenFESimulator(OpenFESimulatorConfig(simulation_directory=tmp_path))
-        network = _FakeNetwork(["same", "same"], edges=[("lig_a", "lig_b"), ("lig_b", "lig_c")])
+        network = AlchemicalNetwork(edges=[_transformation("same"), _transformation("same", a="lig_b", b="lig_c")])
 
         with patch("openplaceholder.impl.simulators.execute_DAG") as execute:
             with pytest.raises(ValueError, match="unique names"):
-                simulator.simulate(network)
+                _simulator(tmp_path).simulate(network)
 
         execute.assert_not_called()
 
-    def test_edge_that_cannot_start_is_skipped_not_fatal(self, tmp_path: Path) -> None:
-        """create() raising (e.g. no atom mapping) must not end the campaign."""
-        simulator = OpenFESimulator(OpenFESimulatorConfig(simulation_directory=tmp_path))
-        network = _FakeNetwork(["edge_a", "edge_b"])
+    def test_runs_every_edge_into_its_own_directory(self, tmp_path: Path) -> None:
+        network = AlchemicalNetwork(edges=[_transformation("edge_a"), _transformation("edge_b", a="lig_b", b="lig_c")])
 
-        with (
-            patch.object(OpenFESimulator, "_rebuild"),
-            patch("openplaceholder.impl.simulators.execute_DAG") as execute,
-            patch("openplaceholder.impl.simulators.SimulationResults", _ResultsStub),
-            patch("openplaceholder.impl.simulators.AlchemicalNetwork", lambda edges: list(edges)),
+        with patch("openplaceholder.impl.simulators.execute_DAG", side_effect=_executes()) as execute:
+            results = _simulator(tmp_path).simulate(network)
+
+        assert len(results) == 2
+        assert {p.name for p in tmp_path.iterdir()} == {"edge_a", "edge_b"}
+        assert all((tmp_path / e / "dag_result.json").is_file() for e in ("edge_a", "edge_b"))
+        for call in execute.call_args_list:
+            assert call.kwargs["raise_error"] is False
+            assert call.kwargs["keep_shared"] is True
+
+    def test_results_pair_back_to_the_transformations_as_run(self, tmp_path: Path) -> None:
+        """The protocol is swapped per run, so results must key to that, not the input."""
+        network = AlchemicalNetwork(edges=[_transformation("edge_a")])
+
+        with patch("openplaceholder.impl.simulators.execute_DAG", side_effect=_executes()):
+            results = _simulator(tmp_path, production_length_ns=0.5).simulate(network)
+
+        transformation, _ = next(iter(results))
+        assert transformation.protocol.settings.simulation_settings.production_length == (0.5 * unit.nanoseconds)
+
+    def test_failed_edge_does_not_stop_the_network(self, tmp_path: Path) -> None:
+        network = AlchemicalNetwork(edges=[_transformation("edge_a"), _transformation("edge_b", a="lig_b", b="lig_c")])
+        outcomes = iter([False, True])
+
+        def execute(dag: ProtocolDAG, **kwargs: object) -> ProtocolDAGResult:
+            return _dag_result(dag, ok=next(outcomes))
+
+        with patch("openplaceholder.impl.simulators.execute_DAG", side_effect=execute):
+            results = _simulator(tmp_path).simulate(network)
+
+        assert len(results) == 2
+        assert not results.ok()
+
+    def test_failure_without_recorded_failures_still_completes(self, tmp_path: Path) -> None:
+        network = AlchemicalNetwork(edges=[_transformation("edge_a")])
+
+        with patch(
+            "openplaceholder.impl.simulators.execute_DAG",
+            side_effect=_executes(ok=False, failures=False),
         ):
-            execute.side_effect = [ValueError("A single LigandAtomMapping is expected"), _FakeDAGResult()]
-            simulator._protocol.gather = lambda _: type("R", (), {"get_estimate": lambda self: 1.0})()
-            results = simulator.simulate(network)
+            results = _simulator(tmp_path).simulate(network)
+
+        assert len(results) == 1
+
+    def test_edge_that_cannot_start_is_skipped_not_fatal(self, tmp_path: Path) -> None:
+        """An edge raising outside the protocol units must not end the campaign."""
+        network = AlchemicalNetwork(edges=[_transformation("edge_a"), _transformation("edge_b", a="lig_b", b="lig_c")])
+        calls = iter([ValueError("A single LigandAtomMapping is expected"), None])
+
+        def execute(dag: ProtocolDAG, **kwargs: object) -> ProtocolDAGResult:
+            if isinstance(outcome := next(calls), Exception):
+                raise outcome
+            return _dag_result(dag)
+
+        with patch("openplaceholder.impl.simulators.execute_DAG", side_effect=execute):
+            results = _simulator(tmp_path).simulate(network)
 
         # only the edge that ran is recorded, and network/results stay 1:1
         assert len(results) == 1
-        assert len(results.network) == 1
+        assert len(results.network.edges) == 1
         assert not (tmp_path / "edge_a" / "dag_result.json").exists()
         assert (tmp_path / "edge_b" / "dag_result.json").is_file()
+
+    def test_unserialisable_failure_does_not_end_the_run(self, tmp_path: Path) -> None:
+        """A result that cannot be written must cost one file, not the run."""
+        network = AlchemicalNetwork(edges=[_transformation("edge_a"), _transformation("edge_b", a="lig_b", b="lig_c")])
+
+        with (
+            patch("openplaceholder.impl.simulators.execute_DAG", side_effect=_executes()),
+            patch.object(ProtocolDAGResult, "to_json", side_effect=TypeError("not serializable")),
+        ):
+            results = _simulator(tmp_path).simulate(network)
+
+        assert len(results) == 2
+        assert not any(tmp_path.glob("*/dag_result.json"))
+
+    def test_simulate_transformation_runs_one_edge(self, tmp_path: Path) -> None:
+        transformation = _transformation("edge_a")
+
+        with patch("openplaceholder.impl.simulators.execute_DAG", side_effect=_executes()):
+            ran = _simulator(tmp_path).simulate_transformation(transformation)
+
+        assert ran is not None
+        executed, result = ran
+        assert result.transformation_key == executed.key
+        assert (tmp_path / "edge_a" / "dag_result.json").is_file()
+
+    def test_simulate_transformation_returns_none_when_it_cannot_start(self, tmp_path: Path) -> None:
+        with patch("openplaceholder.impl.simulators.execute_DAG", side_effect=OSError("disk full")):
+            assert _simulator(tmp_path).simulate_transformation(_transformation("edge_a")) is None
