@@ -5,6 +5,7 @@ from pathlib import Path
 
 from gufe import AlchemicalNetwork
 from gufe import Transformation as GufeTransformation
+from gufe.protocols import ProtocolDAGResult
 from gufe.protocols.protocoldag import execute_DAG
 from gufe.settings import Settings
 from openfe.protocols.openmm_rfe import RelativeHybridTopologyProtocol
@@ -89,55 +90,61 @@ class OpenFESimulator(Simulator):
     def _work_name(transformation: GufeTransformation) -> str:
         return transformation.name or str(transformation.key)
 
+    def simulate_transformation(
+        self, transformation: GufeTransformation
+    ) -> tuple[GufeTransformation, ProtocolDAGResult] | None:
+        """Run one transformation, returning it as executed with its result."""
+        name = self._work_name(transformation)
+        work_directory = Path(self._config.simulation_directory) / name
+
+        logger.info("running transformation %s", name)
+        try:
+            work_directory.mkdir(parents=True, exist_ok=True)
+            # carries this simulator's protocol, so its key is the one the
+            # result references and it records the settings that actually ran
+            rebuilt = self._rebuild(transformation)
+            dag_result = execute_DAG(
+                rebuilt.create(),
+                shared_basedir=work_directory,
+                scratch_basedir=work_directory,
+                keep_shared=self._config.keep_shared,
+                raise_error=False,
+            )
+        except Exception:
+            logger.exception("skipping transformation %s", name)
+            return None
+
+        try:
+            dag_result.to_json(work_directory / "dag_result.json")
+        except TypeError as exc:
+            # a failure whose exception carries a non-JSON-serialisable
+            # argument cannot be written out
+            logger.warning("could not persist result for %s: %s", name, exc)
+
+        if dag_result.ok():
+            try:
+                estimate = self._protocol.gather([dag_result]).get_estimate()
+                logger.info("%s finished: dG = %s", name, estimate)
+            except Exception:
+                # reporting only; the result is already stored either way
+                logger.exception("%s finished but could not be summarised", name)
+        else:
+            failures = dag_result.protocol_unit_failures
+            logger.error("%s failed: %s", name, failures[-1].exception if failures else "unknown")
+
+        return rebuilt, dag_result
+
     def _simulate(self, network: AlchemicalNetwork) -> SimulationResults:
         self._validate(network)
-        root = Path(self._config.simulation_directory)
 
-        dag_results = []
-        executed = []
+        executed, dag_results = [], []
         # network.edges is a frozenset; sort for a deterministic execution order
         for transformation in sorted(network.edges, key=lambda t: (t.name or "", str(t.key))):
-            name = self._work_name(transformation)
-            work_directory = root / name
-
-            logger.info("running transformation %s", name)
-            try:
-                work_directory.mkdir(parents=True, exist_ok=True)
-                # carries this simulator's protocol, so its key is the one the
-                # results reference and it records the settings that actually ran
-                rebuilt = self._rebuild(transformation)
-                dag_result = execute_DAG(
-                    rebuilt.create(),
-                    shared_basedir=work_directory,
-                    scratch_basedir=work_directory,
-                    keep_shared=self._config.keep_shared,
-                    # a failed *unit* is captured in the result rather than raised
-                    raise_error=False,
-                )
-            except Exception:
-                # everything above can still raise outside the protocol units
-                logger.exception("skipping transformation %s", name)
+            ran = self.simulate_transformation(transformation)
+            if ran is None:
                 continue
-
+            rebuilt, dag_result = ran
             executed.append(rebuilt)
             dag_results.append(dag_result)
-            try:
-                dag_result.to_json(work_directory / "dag_result.json")
-            except TypeError as exc:
-                # a failure whose exception carries a non-JSON-serialisable
-                # argument cannot be written out; losing one edge's file is far
-                # better than ending a run that takes days
-                logger.warning("could not persist result for %s: %s", name, exc)
-
-            if dag_result.ok():
-                try:
-                    estimate = self._protocol.gather([dag_result]).get_estimate()
-                    logger.info("%s finished: dG = %s", name, estimate)
-                except Exception:
-                    # reporting only; the result is already stored either way
-                    logger.exception("%s finished but could not be summarised", name)
-            else:
-                failures = dag_result.protocol_unit_failures
-                logger.error("%s failed: %s", name, failures[-1].exception if failures else "unknown")
 
         return SimulationResults(AlchemicalNetwork(edges=executed), dag_results)
