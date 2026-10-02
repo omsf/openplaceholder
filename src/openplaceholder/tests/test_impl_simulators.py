@@ -265,3 +265,14 @@ class TestOpenFESimulator:
         assert rebuilt.name == annotated.name
         assert rebuilt.stateA == annotated.stateA
         assert rebuilt.protocol.settings.simulation_settings.production_length == (0.5 * unit.nanoseconds)
+
+    def test_simulate_transformation_rejects_a_foreign_protocol(self, tmp_path: Path) -> None:
+        """Running one edge directly must not skip the protocol check."""
+        other = AbsoluteSolvationProtocol(settings=AbsoluteSolvationProtocol.default_settings())
+
+        with patch("openplaceholder.impl.simulators.execute_DAG") as execute:
+            with pytest.raises(UnsupportedProtocolError, match="RelativeHybridTopologyProtocol"):
+                _simulator(tmp_path).simulate_transformation(_transformation("a", protocol=other))
+
+        execute.assert_not_called()
+        assert not list(tmp_path.iterdir())

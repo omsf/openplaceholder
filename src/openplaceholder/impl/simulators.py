@@ -62,19 +62,18 @@ class OpenFESimulator(Simulator):
         rebuilt: GufeTransformation = transformation.copy_with_replacements(protocol=self._protocol)
         return rebuilt
 
+    def _check_protocol(self, transformation: GufeTransformation) -> None:
+        """Checked per transformation, since one can be run on its own."""
+        if not isinstance(transformation.protocol, RelativeHybridTopologyProtocol):
+            raise UnsupportedProtocolError(
+                f"only RelativeHybridTopologyProtocol is supported, "
+                f"{self._work_name(transformation)} carries {type(transformation.protocol).__name__}"
+            )
+
     def _validate(self, network: AlchemicalNetwork) -> None:
         """Reject networks this simulator would otherwise run incorrectly."""
-        foreign = {
-            type(t.protocol).__name__
-            for t in network.edges
-            if not isinstance(t.protocol, RelativeHybridTopologyProtocol)
-        }
-        if foreign:
-            # _rebuild would replace these with this simulator's protocol,
-            # silently running different physics than the network describes
-            raise UnsupportedProtocolError(
-                f"only RelativeHybridTopologyProtocol is supported, network carries: {sorted(foreign)}"
-            )
+        for transformation in network.edges:
+            self._check_protocol(transformation)
 
         names = Counter(self._work_name(t) for t in network.edges)
         if collisions := sorted(name for name, count in names.items() if count > 1):
@@ -89,6 +88,7 @@ class OpenFESimulator(Simulator):
         self, transformation: GufeTransformation
     ) -> tuple[GufeTransformation, ProtocolDAGResult] | None:
         """Run one transformation, returning it as executed with its result."""
+        self._check_protocol(transformation)
         name = self._work_name(transformation)
         work_directory = Path(self._config.simulation_directory) / name
 
