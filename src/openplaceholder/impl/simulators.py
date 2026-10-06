@@ -64,20 +64,22 @@ class OpenFESimulator(Simulator):
         rebuilt: GufeTransformation = transformation.copy_with_replacements(protocol=self._protocol)
         return rebuilt
 
-    def _check_protocol(self, transformation: GufeTransformation) -> None:
+    @staticmethod
+    def _check_protocol(transformation: GufeTransformation) -> None:
         """Checked per transformation, since one can be run on its own."""
         if not isinstance(transformation.protocol, RelativeHybridTopologyProtocol):
             raise UnsupportedProtocolError(
                 f"only RelativeHybridTopologyProtocol is supported, "
-                f"`{self._work_name(transformation)}` carries {type(transformation.protocol).__name__}"
+                f"`{OpenFESimulator._work_name(transformation)}` carries {type(transformation.protocol).__name__}"
             )
 
-    def _validate(self, network: AlchemicalNetwork) -> None:
+    @staticmethod
+    def _validate(network: AlchemicalNetwork) -> None:
         """Reject networks this simulator would otherwise run incorrectly."""
         for transformation in network.edges:
-            self._check_protocol(transformation)
+            OpenFESimulator._check_protocol(transformation)
 
-        names = Counter(self._work_name(t) for t in network.edges)
+        names = Counter(OpenFESimulator._work_name(t) for t in network.edges)
         if collisions := sorted(name for name, count in names.items() if count > 1):
             # they would share a working directory and overwrite each other
             raise ValueError(f"transformations do not have unique names: {collisions}")
