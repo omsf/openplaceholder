@@ -3,8 +3,7 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
-from gufe import AlchemicalNetwork
-from gufe import Transformation as GufeTransformation
+from gufe import AlchemicalNetwork, Transformation
 from gufe.protocols import ProtocolDAGResult
 from gufe.protocols.protocoldag import execute_DAG
 from openfe.protocols.openmm_rfe import RelativeHybridTopologyProtocol
@@ -59,13 +58,13 @@ class OpenFESimulator(Simulator):
         settings.protocol_repeats = self._config.protocol_repeats
         return settings
 
-    def _rebuild(self, transformation: GufeTransformation) -> GufeTransformation:
+    def _rebuild(self, transformation: Transformation) -> Transformation:
         """Swap in this simulator's protocol, leaving everything else untouched."""
-        rebuilt: GufeTransformation = transformation.copy_with_replacements(protocol=self._protocol)
+        rebuilt: Transformation = transformation.copy_with_replacements(protocol=self._protocol)
         return rebuilt
 
     @staticmethod
-    def _check_protocol(transformation: GufeTransformation) -> None:
+    def _check_protocol(transformation: Transformation) -> None:
         """Checked per transformation, since one can be run on its own."""
         if not isinstance(transformation.protocol, RelativeHybridTopologyProtocol):
             raise UnsupportedProtocolError(
@@ -85,12 +84,12 @@ class OpenFESimulator(Simulator):
             raise ValueError(f"transformations do not have unique names: {collisions}")
 
     @staticmethod
-    def _work_name(transformation: GufeTransformation) -> str:
+    def _work_name(transformation: Transformation) -> str:
         return transformation.name or str(transformation.key)
 
     def simulate_transformation(
-        self, transformation: GufeTransformation
-    ) -> tuple[GufeTransformation, ProtocolDAGResult] | None:
+        self, transformation: Transformation
+    ) -> tuple[Transformation, ProtocolDAGResult] | None:
         """Run one transformation, returning it as executed with its result."""
         self._check_protocol(transformation)
         name = self._work_name(transformation)
