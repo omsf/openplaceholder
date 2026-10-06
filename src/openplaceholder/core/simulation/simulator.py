@@ -50,33 +50,40 @@ def _ligand_components(network: AlchemicalNetwork) -> list[set[str]]:
 class SimulationResults(GufeTokenizable):  # type: ignore
     """Each transformation as it was executed, paired with its result."""
 
-    def __init__(self, results: list[list[Any]]):
-        self.results = results
+    def __init__(self, results: list[tuple[Transformation, ProtocolDAGResult]]):
+        self._dag_results = []
+        self._transformations = []
+        self._size = len(results)
+        self._ok = self._size > 0
+
+        for transformation, pdr in results:
+            self._dag_results.append(pdr)
+            self._transformations.append(transformation)
+
+            if not pdr.ok() and self._ok:
+                self._ok = False
 
     def __iter__(self) -> Iterator[tuple[Transformation, ProtocolDAGResult]]:
-        """``(transformation, result)`` pairs, in execution order."""
-        for transformation, dag_result in self.results:
-            yield transformation, dag_result
+        yield from zip(self._transformations, self._dag_results)
 
     def _to_dict(self) -> dict[Any, Any]:
-        return {"results": self.results}
+        return {"_transformations": self._transformations, "_dag_results": self._dag_results}
 
     @classmethod
     def _from_dict(cls, dct: dict[Any, Any]) -> Self:
-        return cls(**dct)
+        transformations, dag_results = dct["_transformations"], dct["_dag_results"]
+        return cls(list(zip(transformations, dag_results)))
 
     @classmethod
     def _defaults(cls) -> dict[Any, Any]:
         return {}
 
     def __len__(self) -> int:
-        return len(self.results)
+        return self._size
 
     def ok(self) -> bool:
         """Whether every transformation completed without failures."""
-        if len(self.results) > 0:
-            return all(dag_result.ok() for _, dag_result in self.results)
-        return False
+        return self._ok
 
 
 class Simulator(Module, ABC):

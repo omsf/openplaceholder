@@ -133,7 +133,6 @@ class OpenFESimulator(Simulator):
 
     def _simulate(self, network: AlchemicalNetwork) -> SimulationResults:
         self._validate(network)
-
         results = []
         # network.edges is a frozenset; sort for a deterministic execution order
         for transformation in sorted(network.edges, key=lambda t: (t.name or "", str(t.key))):
@@ -141,6 +140,6 @@ class OpenFESimulator(Simulator):
             if ran is None:
                 continue
             rebuilt, dag_result = ran
-            results.append([rebuilt, dag_result])
+            results.append((rebuilt, dag_result))
 
         return SimulationResults(results)

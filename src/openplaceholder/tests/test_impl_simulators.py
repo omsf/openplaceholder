@@ -107,7 +107,7 @@ def _executes(ok: bool = True, failures: bool = True) -> Callable[[ProtocolDAG],
 def _results(transformations: Iterable[Transformation], ok: bool = True) -> SimulationResults:
     results = []
     for t in transformations:
-        results.append([t, _dag_result(t.create(), ok=ok)])
+        results.append((t, _dag_result(t.create(), ok=ok)))
     return SimulationResults(results)
 
 
@@ -145,7 +145,7 @@ class TestSimulationResults:
     def test_transformation_result_pairs(self) -> None:
         a, b = _transformation("a", a="lig_a", b="lig_b"), _transformation("b", a="lig_b", b="lig_c")
         sim_results = _results((b, a))
-        assert [transformation.name for transformation, _ in sim_results.results] == ["b", "a"]
+        assert [transformation.name for transformation, _ in sim_results] == ["b", "a"]
 
     def test_ok(self) -> None:
         a = _transformation("a")
@@ -238,7 +238,7 @@ class TestOpenFESimulator:
         with patch("openplaceholder.impl.simulators.execute_DAG", side_effect=_executes()):
             results: SimulationResults = _simulator(tmp_path, production_length_ns=new_length).simulate(network)
 
-        new_transformation, _ = results.results[0]
+        new_transformation, _ = next(iter(results))
 
         assert isinstance(new_transformation.protocol.settings, RelativeHybridTopologyProtocolSettings)
         assert new_transformation.protocol.settings.simulation_settings.production_length == (
@@ -273,7 +273,7 @@ class TestOpenFESimulator:
 
         assert len(results) == len(network.edges)
 
-        for _, pdr in results.results:
+        for _, pdr in results:
             assert isinstance(pdr, ProtocolDAGResult)
             assert not pdr.ok()
 
