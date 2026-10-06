@@ -3,7 +3,12 @@ from abc import ABC, abstractmethod
 from typing import Any, Iterator, Self
 
 import networkx as nx
-from gufe import AlchemicalNetwork, ChemicalSystem, SmallMoleculeComponent
+from gufe import (
+    AlchemicalNetwork,
+    ChemicalSystem,
+    SmallMoleculeComponent,
+    Transformation,
+)
 from gufe.protocols import ProtocolDAGResult
 from gufe.tokenization import GufeTokenizable
 
@@ -25,12 +30,7 @@ class UnsupportedProtocolError(Exception):
 
 
 class DisconnectedNetworkError(Exception):
-    """To be raised when a network's ligands do not form one connected component.
-
-    Relative free energies are only meaningful within a connected component: two
-    ligands with no path of transformations between them share no reference, so
-    their estimates cannot be placed on a common scale.
-    """
+    """To be raised when a network's ligands do not form one connected component."""
 
 
 def _ligand_names(system: ChemicalSystem) -> set[str]:
@@ -38,13 +38,7 @@ def _ligand_names(system: ChemicalSystem) -> set[str]:
 
 
 def _ligand_components(network: AlchemicalNetwork) -> list[set[str]]:
-    """Group the network's ligands by connectivity through its transformations.
-
-    Deliberately not ``AlchemicalNetwork.connected_subgraphs()``: that walks
-    ChemicalSystems, and an RBFE network's complex and solvent legs touch
-    disjoint sets of them, so a healthy network always reports two subgraphs.
-    Connectivity that matters here is between *ligands*.
-    """
+    """Group the network's ligands by connectivity through its transformations."""
     graph = nx.Graph()
     for transformation in network.edges:
         a, b = _ligand_names(transformation.stateA), _ligand_names(transformation.stateB)
@@ -59,7 +53,7 @@ class SimulationResults(GufeTokenizable):  # type: ignore
     def __init__(self, results: list[list[Any]]):
         self.results = results
 
-    def __iter__(self) -> Iterator[tuple[Any, ProtocolDAGResult]]:
+    def __iter__(self) -> Iterator[tuple[Transformation, ProtocolDAGResult]]:
         """``(transformation, result)`` pairs, in execution order."""
         for transformation, dag_result in self.results:
             yield transformation, dag_result

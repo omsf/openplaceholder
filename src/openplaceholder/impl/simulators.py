@@ -7,8 +7,10 @@ from gufe import AlchemicalNetwork
 from gufe import Transformation as GufeTransformation
 from gufe.protocols import ProtocolDAGResult
 from gufe.protocols.protocoldag import execute_DAG
-from gufe.settings import Settings
 from openfe.protocols.openmm_rfe import RelativeHybridTopologyProtocol
+from openfe.protocols.openmm_rfe.equil_rfe_settings import (
+    RelativeHybridTopologyProtocolSettings,
+)
 from openff.units import unit
 
 from openplaceholder.core.simulation.simulator import (
@@ -43,7 +45,7 @@ class OpenFESimulator(Simulator):
     def _setup(self) -> None:
         self._protocol = RelativeHybridTopologyProtocol(settings=self._settings())
 
-    def _settings(self) -> Settings:
+    def _settings(self) -> RelativeHybridTopologyProtocolSettings:
         settings = RelativeHybridTopologyProtocol.default_settings().unfrozen_copy()
         settings.forcefield_settings.small_molecule_forcefield = self._config.small_molecule_forcefield
         settings.thermo_settings.temperature = 298.15 * unit.kelvin
@@ -67,7 +69,7 @@ class OpenFESimulator(Simulator):
         if not isinstance(transformation.protocol, RelativeHybridTopologyProtocol):
             raise UnsupportedProtocolError(
                 f"only RelativeHybridTopologyProtocol is supported, "
-                f"{self._work_name(transformation)} carries {type(transformation.protocol).__name__}"
+                f"`{self._work_name(transformation)}` carries {type(transformation.protocol).__name__}"
             )
 
     def _validate(self, network: AlchemicalNetwork) -> None:
@@ -93,11 +95,11 @@ class OpenFESimulator(Simulator):
         work_directory = Path(self._config.simulation_directory) / name
 
         logger.info("running transformation %s", name)
+        work_directory.mkdir(parents=True, exist_ok=True)
+        rebuilt = self._rebuild(transformation)
         try:
-            work_directory.mkdir(parents=True, exist_ok=True)
             # carries this simulator's protocol, so its key is the one the
             # result references and it records the settings that actually ran
-            rebuilt = self._rebuild(transformation)
             dag_result = execute_DAG(
                 rebuilt.create(),
                 shared_basedir=work_directory,
