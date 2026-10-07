@@ -113,9 +113,7 @@ def run(config: Path, begin: str | None, end: str | None, input: Path | None, ou
 
     config_map = load_toml(config)
 
-    # strict: only stages within --begin..--end are looked up, so a missing one
-    # is always a configuration error rather than a stage to quietly skip
-    pipeline = Pipeline.from_config_map(config_map, lower=first, upper=last)
+    pipeline = Pipeline.from_config_map(config_map, lower=first, upper=last, allow_partial=True)
     result: GufeTokenizable = run_serial(pipeline, data)
     result.to_json(output)
 
