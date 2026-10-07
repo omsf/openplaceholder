@@ -3,7 +3,8 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
-from gufe import AlchemicalNetwork, Transformation
+import gufe
+from gufe import AlchemicalNetwork
 from gufe.protocols import ProtocolDAGResult
 from gufe.protocols.protocoldag import execute_DAG
 from openfe.protocols.openmm_rfe import RelativeHybridTopologyProtocol
@@ -33,11 +34,7 @@ class OpenFESimulatorConfig(SimulatorConfigBase):
 
 
 class OpenFESimulator(Simulator):
-    """Runs an AlchemicalNetwork's transformations sequentially.
-
-    OpenMM picks the fastest available platform itself, so no device is
-    selected here.
-    """
+    """Runs the ``Transformation`` instances of a  ``AlchemicalNetwork`` sequentially."""
 
     _config: OpenFESimulatorConfig
 
@@ -58,14 +55,14 @@ class OpenFESimulator(Simulator):
         settings.protocol_repeats = self._config.protocol_repeats
         return settings
 
-    def _rebuild(self, transformation: Transformation) -> Transformation:
-        """Swap in this simulator's protocol, leaving everything else untouched."""
-        rebuilt: Transformation = transformation.copy_with_replacements(protocol=self._protocol)
-        return rebuilt
-
     @staticmethod
-    def _check_protocol(transformation: Transformation) -> None:
-        """Checked per transformation, since one can be run on its own."""
+    def _check_protocol(transformation: gufe.Transformation) -> None:
+        """Check that a ``Transformation`` instance's ``Protocol`` is supported.
+
+        Raises
+        ------
+        UnsupportedProtocolError
+        """
         if not isinstance(transformation.protocol, RelativeHybridTopologyProtocol):
             raise UnsupportedProtocolError(
                 f"only RelativeHybridTopologyProtocol is supported, "
@@ -74,7 +71,18 @@ class OpenFESimulator(Simulator):
 
     @staticmethod
     def _validate(network: AlchemicalNetwork) -> None:
-        """Reject networks this simulator would otherwise run incorrectly."""
+        """Reject ``AlchemicalNetwork`` instances that will not run correctly.
+
+        Raises
+        ------
+        UnsupportedProtocolError
+            Any ``Transformation`` in the ``AlchemicalNetwork``
+            contains an unsupported ``Protocol``.
+
+        ValueError
+            The ``Transformation`` names are not unique.
+        """
+
         for transformation in network.edges:
             OpenFESimulator._check_protocol(transformation)
 
@@ -84,41 +92,58 @@ class OpenFESimulator(Simulator):
             raise ValueError(f"transformations do not have unique names: {collisions}")
 
     @staticmethod
-    def _work_name(transformation: Transformation) -> str:
+    def _work_name(transformation: gufe.Transformation) -> str:
         return transformation.name or str(transformation.key)
 
     def simulate_transformation(
-        self, transformation: Transformation
-    ) -> tuple[Transformation, ProtocolDAGResult] | None:
-        """Run one transformation, returning it as executed with its result."""
+        self, transformation: gufe.Transformation
+    ) -> tuple[gufe.Transformation, ProtocolDAGResult] | None:
+        """Run one ``Transformation``, returning itself and its result.
+
+        Parameters
+        ----------
+        transformation
+            The ``Transformation`` to run.
+
+        Returns
+        -------
+        tuple[``Transformation``, ProtocolDAGResult] | None
+
+        Raises
+        ------
+        UnsupportedProtocolError
+        PermissionError
+        """
         self._check_protocol(transformation)
         name = self._work_name(transformation)
         work_directory = Path(self._config.simulation_directory) / name
 
         logger.info("running transformation %s", name)
         work_directory.mkdir(parents=True, exist_ok=True)
-        rebuilt = self._rebuild(transformation)
+        modified_transformation = transformation.copy_with_replacements(protocol=self._protocol)
         try:
             # carries this simulator's protocol, so its key is the one the
             # result references and it records the settings that actually ran
             dag_result = execute_DAG(
-                rebuilt.create(),
+                modified_transformation.create(),
                 shared_basedir=work_directory,
                 scratch_basedir=work_directory,
                 keep_shared=self._config.keep_shared,
                 raise_error=False,
             )
-        except Exception:
+        except Exception as e:
+            if isinstance(e, TypeError) and "JSON" in repr(e):
+                raise e
             logger.exception("skipping transformation %s", name)
             return None
 
-        try:
-            dag_result.to_json(work_directory / "dag_result.json")
-        except TypeError as exc:
-            # a failure whose exception carries a non-JSON-serialisable
-            # argument cannot be written out
-            logger.warning("could not persist result for %s: %s", name, exc)
+        dag_result.to_json(work_directory / "dag_result.json")
 
+        self._log_summary(name, dag_result)
+
+        return modified_transformation, dag_result
+
+    def _log_summary(self, name: str, dag_result: ProtocolDAGResult) -> None:
         if dag_result.ok():
             try:
                 estimate = self._protocol.gather([dag_result]).get_estimate()
@@ -130,17 +155,14 @@ class OpenFESimulator(Simulator):
             failures = dag_result.protocol_unit_failures
             logger.error("%s failed: %s", name, failures[-1].exception if failures else "unknown")
 
-        return rebuilt, dag_result
-
     def _simulate(self, network: AlchemicalNetwork) -> SimulationResults:
         self._validate(network)
         results = []
         # network.edges is a frozenset; sort for a deterministic execution order
         for transformation in sorted(network.edges, key=lambda t: (t.name or "", str(t.key))):
             ran = self.simulate_transformation(transformation)
-            if ran is None:
-                continue
-            rebuilt, dag_result = ran
-            results.append((rebuilt, dag_result))
+            if ran is not None:
+                rebuilt, dag_result = ran
+                results.append((rebuilt, dag_result))
 
         return SimulationResults(results)

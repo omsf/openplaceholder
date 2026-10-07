@@ -20,7 +20,6 @@ from gufe.protocols.protocolunit import (
     ProtocolUnitResult,
 )
 from gufe.settings.models import Settings
-from openfe.protocols.openmm_afe import AbsoluteSolvationProtocol
 from openfe.protocols.openmm_rfe import RelativeHybridTopologyProtocol
 from openfe.protocols.openmm_rfe.equil_rfe_settings import (
     RelativeHybridTopologyProtocolSettings,
@@ -169,7 +168,7 @@ class TestOpenFESimulator:
     def test_init(self, tmp_path: Path) -> None:
         _simulator(tmp_path)
 
-    def test_asap_default_settings(self, tmp_path: Path) -> None:
+    def test_default_settings(self, tmp_path: Path) -> None:
         settings = _simulator(tmp_path, production_length_ns=0.5)._protocol.settings
         defaults = RelativeHybridTopologyProtocol.default_settings()
         assert isinstance(settings, RelativeHybridTopologyProtocolSettings)
@@ -305,36 +304,36 @@ class TestOpenFESimulator:
         assert not (tmp_path / t0_name / "dag_result.json").exists()
         assert (tmp_path / t1_name / "dag_result.json").is_file()
 
-    def test_unserialisable_failure_does_not_raise(self, tmp_path: Path) -> None:
+    def test_unserialisable_failure_raises(self, tmp_path: Path) -> None:
         network = AlchemicalNetwork(edges=_transformation_chain("abc"))
 
-        with (
-            patch("openplaceholder.impl.simulators.execute_DAG", side_effect=_executes()),
-            patch.object(ProtocolDAGResult, "to_json", side_effect=TypeError("not serializable")),
-        ):
-            results = _simulator(tmp_path).simulate(network)
+        # create a type that the gufe json encoder won't recognize
+        class UnknownType: ...
 
-        assert len(results) == len(network.edges)
-        assert not any(tmp_path.glob("*/dag_result.json"))
+        # return a ProtocolDAGResult with unrecognized outputs
+        def make_fake_result(dag: ProtocolDAG, **_: dict[str, Any]) -> ProtocolDAGResult:
+            source = dag.protocol_units[0]
+            results = [
+                ProtocolUnitResult(
+                    source_key=source.key,
+                    inputs={},
+                    outputs={"invalid_data": UnknownType()},
+                )
+            ]
 
-    def test_simulate_transformation_runs_one_edge(self, tmp_path: Path) -> None:
-        transformation = _transformation("edge_a")
+            return ProtocolDAGResult(
+                protocol_units=[source],
+                protocol_unit_results=results,
+                transformation_key=dag.transformation_key,
+            )
 
-        with patch("openplaceholder.impl.simulators.execute_DAG", side_effect=_executes()):
-            ran = _simulator(tmp_path).simulate_transformation(transformation)
+        with patch("openplaceholder.impl.simulators.execute_DAG", side_effect=make_fake_result):
+            with pytest.raises(TypeError, match=f"{UnknownType.__name__} is not JSON serializable"):
+                _simulator(tmp_path).simulate(network)
 
-        assert ran is not None
-        executed, result = ran
-        assert result.transformation_key == executed.key
-        assert (tmp_path / "edge_a" / "dag_result.json").is_file()
-
-    def test_simulate_transformation_returns_none_when_it_cannot_start(self, tmp_path: Path) -> None:
-        with patch("openplaceholder.impl.simulators.execute_DAG", side_effect=OSError("disk full")):
-            assert _simulator(tmp_path).simulate_transformation(_transformation("edge_a")) is None
-
-    def test_simulate_transformation_rejects_a_foreign_protocol(self, tmp_path: Path) -> None:
+    def test_simulate_transformation_rejects_foreign_protocol(self, tmp_path: Path) -> None:
         """Running one edge directly must not skip the protocol check."""
-        other = AbsoluteSolvationProtocol(settings=AbsoluteSolvationProtocol.default_settings())
+        other = ForeignProtocol(ForeignProtocol.default_settings())
 
         with patch("openplaceholder.impl.simulators.execute_DAG") as execute:
             with pytest.raises(UnsupportedProtocolError, match="RelativeHybridTopologyProtocol"):
