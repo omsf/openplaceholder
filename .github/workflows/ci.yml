@@ -41,3 +41,17 @@ jobs:
 
       - name: Test
         run: pytest ./src/
+
+  docs-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up pixi
+        uses: prefix-dev/setup-pixi@v0.9.6
+        with:
+          activate-environment: docs
+
+      - name: Build docs
+        run: make html
+        working-directory: ./docs
