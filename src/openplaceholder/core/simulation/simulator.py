@@ -1,6 +1,6 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Iterator, Self
+from typing import Any, Iterable, Iterator, Self
 
 import networkx as nx
 from gufe import (
@@ -22,15 +22,15 @@ class SimulatorConfigBase(ConfigBase): ...
 
 
 class EmptyNetworkError(Exception):
-    """To be raised when a network contains no transformations to run."""
+    """To be raised when a network contains no ``Transformation`` instances to run."""
 
 
 class UnsupportedProtocolError(Exception):
-    """To be raised when a network carries a protocol the simulator cannot run."""
+    """To be raised when an ``AlchemicalNetwork`` carries a ``Protocol`` the ``Simulator`` cannot run."""
 
 
 class DisconnectedNetworkError(Exception):
-    """To be raised when a network's ligands do not form one connected component."""
+    """To be raised when the ``AlchemicalNetwork`` instance's ligands do not form a fully connected network."""
 
 
 def _ligand_names(system: ChemicalSystem) -> set[str]:
@@ -48,20 +48,32 @@ def _ligand_components(network: AlchemicalNetwork) -> list[set[str]]:
 
 
 class SimulationResults(GufeTokenizable):  # type: ignore
-    """Each transformation as it was executed, paired with its result."""
+    """``ProtocolDAGResults`` paired with their source ``Transformation``."""
 
-    def __init__(self, results: list[tuple[Transformation, ProtocolDAGResult]]):
+    def __init__(self, results: Iterable[tuple[Transformation, ProtocolDAGResult]]):
+        """Initializer for SimulationResults.
+
+        Parameters
+        ----------
+        results
+            An iterable of ``Transformation`` instances and their
+            resulting ``ProtocolDAGResult`` instances.
+        """
         self._dag_results = []
         self._transformations = []
-        self._size = len(results)
-        self._ok = self._size > 0
+        self._size = 0
+        self._ok = True
 
         for transformation, pdr in results:
+            self._size += 1
             self._dag_results.append(pdr)
             self._transformations.append(transformation)
 
-            if not pdr.ok() and self._ok:
+            if not pdr.ok():
                 self._ok = False
+
+        if self._size == 0:
+            self._ok = False
 
     def __iter__(self) -> Iterator[tuple[Transformation, ProtocolDAGResult]]:
         yield from zip(self._transformations, self._dag_results)
@@ -72,7 +84,7 @@ class SimulationResults(GufeTokenizable):  # type: ignore
     @classmethod
     def _from_dict(cls, dct: dict[Any, Any]) -> Self:
         transformations, dag_results = dct["_transformations"], dct["_dag_results"]
-        return cls(list(zip(transformations, dag_results)))
+        return cls(list(zip(transformations, dag_results, strict=True)))
 
     @classmethod
     def _defaults(cls) -> dict[Any, Any]:
@@ -87,13 +99,22 @@ class SimulationResults(GufeTokenizable):  # type: ignore
 
 
 class Simulator(Module, ABC):
+    """Simulator abstract class.
+
+    Implementations of a Simulator should process an
+    ``AlchemicalNetwork`` and return ``SimulationResults``.
+    """
 
     @abstractmethod
-    def _simulate(self, network: AlchemicalNetwork) -> SimulationResults:
-        raise NotImplementedError
+    def _simulate(self, network: AlchemicalNetwork) -> SimulationResults: ...
 
     def simulate(self, network: AlchemicalNetwork) -> SimulationResults:
-        """Run every transformation in ``network``.
+        """Run every ``Transformation`` in ``network``.
+
+        Parameters
+        ----------
+        network
+            The ``AlchemicalNetwork`` to process.
 
         Raises
         ------
