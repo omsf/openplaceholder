@@ -17,6 +17,7 @@ class Stage(IntEnum):
     SELECTOR = auto()
     TRANSFORMATION = auto()
     MAPPER = auto()
+    SIMULATOR = auto()
 
 
 # Each stage, where to find its configuration based on keys, and
@@ -29,6 +30,7 @@ CONFIG_PLUGIN_MAP: dict[Stage, tuple[tuple[str, ...], bool]] = {
     Stage.SELECTOR: (("selection", "selector"), False),
     Stage.TRANSFORMATION: (("assembly", "transformations"), True),
     Stage.MAPPER: (("assembly", "mapping"), False),
+    Stage.SIMULATOR: (("simulation", "simulator"), False),
 }
 
 
