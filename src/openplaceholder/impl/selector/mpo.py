@@ -123,18 +123,34 @@ class MPOSelector(Selector):
         fixed by earlier batches are never revisited -- but keeps every
         individual solve within the size where the exact MILP is fast.
         """
+        batches = self._batch_groups(groups)
         chosen: list[int] = []
-        for batch_groups in self._batch_groups(groups):
+        for position, batch_groups in enumerate(batches):
             batch_indices = [i for group in batch_groups for i in group]
             local = {pool_index: local_index for local_index, pool_index in enumerate(batch_indices)}
 
             sub_matrix = matrix[np.ix_(batch_indices, batch_indices)]
             sub_groups = [[local[i] for i in group] for group in batch_groups]
-            bias = matrix[np.ix_(batch_indices, chosen)].sum(axis=1) if chosen else None
+            pending = [group for later in batches[position + 1 :] for group in later]
+            bias = self._bias(matrix, batch_indices, chosen, pending)
 
             picked = self._optimize(sub_matrix, sub_groups, bias, time_limit=self._BATCH_TIME_LIMIT)
             chosen += [batch_indices[i] for i in picked]
         return chosen
+
+    @staticmethod
+    def _bias(
+        matrix: np.ndarray, batch_indices: list[int], chosen: list[int], pending: list[list[int]]
+    ) -> np.ndarray | None:
+        """Linear coefficients tying a batch to the rest of the pool."""
+        if not chosen and not pending:
+            return None
+        bias = np.zeros(len(batch_indices), dtype=float)
+        if chosen:
+            bias += matrix[np.ix_(batch_indices, chosen)].sum(axis=1)
+        for group in pending:
+            bias += matrix[np.ix_(batch_indices, group)].mean(axis=1)
+        return bias
 
     def _batch_groups(self, groups: list[list[int]]) -> list[list[list[int]]]:
         """Partition groups into consecutive batches, each with a total
