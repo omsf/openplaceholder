@@ -12,6 +12,7 @@ from openplaceholder.core.pipeline import Pipeline
 from openplaceholder.core.selection.normalizer import Normalizer
 from openplaceholder.core.selection.selector import Selector
 from openplaceholder.core.selection.validator import Validator
+from openplaceholder.core.simulation.simulator import Simulator
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +55,8 @@ def run_serial(pipeline: Pipeline, initial_data: Any) -> GufeTokenizable:
                 data = plugin.transform(data)
             case Mapper():
                 data = plugin.map(data)
+            case Simulator():
+                data = plugin.simulate(data)
             case _:
                 raise TypeError(f"Unrecognized module {plugin}")
     return data
