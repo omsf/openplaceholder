@@ -75,32 +75,38 @@ def run_serial(pipeline: Pipeline, initial_data: Any) -> GufeTokenizable:
     ------
     TypeError
         When an unrecognized type is found in the pipeline.
+    ValueError
+        When the pipeline contains no plugins
     """
 
-    data = initial_data
+    data: GufeTokenizable | None = initial_data
+
+    if len(pipeline.plugins) == 0:
+        raise ValueError("Pipeline contains no plugins")
+
     for plugin in pipeline:
-        match plugin:
-            case StructureGenerator():
+        match plugin, data:
+            case StructureGenerator(), None:
                 logger.info("Generating structures")
                 data = plugin.run()
-            case Validator():
+            case Validator(), StructureSet():
                 logger.info("applying validator: %s", plugin.__class__.__name__)
                 data = plugin.validate_structures(data)
-            case Normalizer():
+            case Normalizer(), StructureSet():
                 logger.info("applying normalizer: %s", plugin.__class__.__name__)
                 data = plugin.normalize(data)
-            case Selector():
+            case Selector(), StructureSet():
                 logger.info("selecting structure series from structure pool using: %s", plugin.__class__.__name__)
                 data = plugin.select(data)
-            case Transformation():
+            case Transformation(), StructureSeries():
                 logger.info("applying transformation: %s", plugin.__class__.__name__)
                 data = plugin.transform(data)
-            case Mapper():
+            case Mapper(), StructureSeries():
                 data = plugin.map(data)
-            case Simulator():
+            case Simulator(), AlchemicalNetwork():
                 data = plugin.simulate(data)
-            case _:
-                raise TypeError(f"Unrecognized module {plugin}")
+            case module, _:
+                raise TypeError(f"Unrecognized module and/or incompatible data {module}, {data}")
     return data
 
 
@@ -133,15 +139,16 @@ def run_prefect(pipeline: Pipeline, initial_data: Any) -> GufeTokenizable:
 
     assert pipeline.validators is not None
     assert pipeline.selector is not None
+    assert pipeline.transformations is not None
     assert pipeline.mapper is not None
 
-    data = validate_structures(pipeline.validators, initial_data)  # type: ignore[var-annotated]
+    data: GufeTokenizable
+
+    data = validate_structures(pipeline.validators, initial_data)
 
     assert isinstance(data, StructureSet)
 
     data = select_structures(pipeline.selector, data)
-
-    assert pipeline.transformations is not None
 
     for transformation in pipeline.transformations:
         assert isinstance(data, StructureSeries)
