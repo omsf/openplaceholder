@@ -1,12 +1,21 @@
 import logging
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from typing import Any, Self
+import numpy as np
 
+from gufe import (
+    ChemicalSystem,
+    ProteinComponent,
+    Transformation,
+)
+from gufe.protocols import ProtocolDAGResult
 from gufe.tokenization import GufeTokenizable
+from pint import Quantity
 
 from openplaceholder.core.configuration import ConfigBase
 from openplaceholder.core.interface import Module
-from openplaceholder.core.simulation.simulator import SimulationResults
+from openplaceholder.core.simulation.simulator import SimulationResults, ligand_names
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +25,73 @@ class AnalyzerConfigBase(ConfigBase): ...
 
 class NoResultsError(Exception):
     """When ``SimulationResults`` holds nothing that can be analyzed."""
+
+
+def _phase(system: ChemicalSystem) -> str:
+    """Which leg of the thermodynamic cycle ``system`` belongs to."""
+    if list(system.get_components_of_type(ProteinComponent)):
+        return "complex"
+    return "solvent"
+
+
+def _leg_estimate(transformation: Transformation, dag_result: ProtocolDAGResult) -> tuple[Quantity, Quantity]:
+    """Predicted free energy of one leg, paired with its uncertainty."""
+    result = transformation.protocol.gather([dag_result])
+    estimate: Quantity = result.get_estimate()
+    uncertainty: Quantity = result.get_uncertainty()
+
+    if uncertainty.m == 0.0:
+        # a single repeat has no unc so fall back to MBAR error
+        uncertainty = np.mean(error for _, error in result.get_individual_estimates())
+
+    return estimate, uncertainty
+
+
+def extract_ddg(results: SimulationResults) -> list[dict[str, Any]]:
+    """Pair up the legs of ``results`` into one relative free energy per ligand pair.
+
+    Raises
+    ------
+    ValueError
+        When a ligand pair carries more than one leg of the same phase.
+    """
+    legs: dict[tuple[str, str], dict[str, tuple[Quantity, Quantity]]] = defaultdict(dict)
+
+    for transformation, dag_result in results:
+        if not dag_result.ok():
+            logger.warning("dropping failed leg %s", transformation.name or transformation.key)
+            continue
+
+        ligands_a = sorted(ligand_names(transformation.stateA))
+        ligands_b = sorted(ligand_names(transformation.stateB))
+        if len(ligands_a) != 1 or len(ligands_b) != 1:
+            raise ValueError(f"expected one ligand per state, found {ligands_a} -> {ligands_b}")
+
+        pair = (ligands_a[0], ligands_b[0])
+        phase = _phase(transformation.stateA)
+        if phase in legs[pair]:
+            raise ValueError(f"{pair[0]} -> {pair[1]} carries more than one {phase} leg")
+        legs[pair][phase] = _leg_estimate(transformation, dag_result)
+
+    records = []
+    for pair in sorted(legs):
+        phases = legs[pair]
+        if set(phases) != {"complex", "solvent"}:
+            logger.warning("dropping %s -> %s, only the %s leg is usable", *pair, *sorted(phases))
+            continue
+
+        complex_dg, complex_error = phases["complex"]
+        solvent_dg, solvent_error = phases["solvent"]
+        records.append(
+            {
+                "stateA": pair[0],
+                "stateB": pair[1],
+                "ddg": complex_dg - solvent_dg,
+                "uncertainty": (complex_error**2 + solvent_error**2) ** 0.5,
+            }
+        )
+
+    return records
 
 
 class AnalysisResults(GufeTokenizable):  # type: ignore
