@@ -3,8 +3,10 @@ from dataclasses import dataclass
 from typing import Any
 
 import networkx as nx
+import numpy as np
 from cinnabar import FEMap, Measurement
 from openff.units import unit
+from pint import Quantity
 
 from openplaceholder.core.analysis.analyzer import (
     AnalysisResults,
@@ -64,6 +66,39 @@ def _dg_records(femap: FEMap) -> list[dict[str, Any]]:
     ]
 
 
+def _mean_stderr(values: list[Quantity]) -> tuple[Quantity | None, Quantity | None]:
+    """The average of ``values``, and the standard error of that average."""
+    magnitudes = np.array([value.m_as(unit.kilocalorie_per_mole) for value in values])
+    if len(magnitudes) == 0:
+        return None, None
+
+    mean = np.mean(magnitudes) * unit.kilocalorie_per_mole
+    if len(magnitudes) == 1:
+        return mean, None
+
+    return mean, np.std(magnitudes, ddof=1) / len(magnitudes) ** 0.5 * unit.kilocalorie_per_mole
+
+
+def _cycle_closures(femap: FEMap) -> list[dict[str, Any]]:
+    """Every cycle in the network, with how far it is from summing to zero."""
+    frame = femap.get_cycle_closure_dataframe()
+    return [
+        {
+            # a list, as the tuple cinnabar hands back returns from JSON as one
+            "cycle": list(row["cycle"]),
+            "closure": row["cc (kcal/mol)"] * unit.kilocalorie_per_mole,
+            "closure_per_edge": row["cc_per_edge (kcal/mol)"] * unit.kilocalorie_per_mole,
+            "closure_over_uncertainty": row["cc_unc_normalized"],
+        }
+        for _, row in frame.iterrows()
+    ]
+
+
+def _cycle_closure_errors(cycles: list[dict[str, Any]]) -> list[Quantity]:
+    """How far each cycle is from closing, as a magnitude."""
+    return [abs(cycle["closure"]) for cycle in cycles]
+
+
 class CinnabarAnalyzer(Analyzer):
     """An Analyzer that estimates free energies with cinnabar."""
 
@@ -81,8 +116,23 @@ class CinnabarAnalyzer(Analyzer):
             logger.warning("estimating without %s, disconnected from the network", ", ".join(discarded))
 
         femap = _femap(connected)
+        cycles = _cycle_closures(femap)
+        cycle_error, cycle_error_stderr = _mean_stderr(_cycle_closure_errors(cycles))
+        edge_error, edge_error_stderr = _mean_stderr([record["uncertainty"] for record in connected])
+
+        dg = _dg_records(femap)
+        # only recorded once the estimates above have been generated
+        estimator = femap.get_estimator_metadata("MLE")
+
         statistics = {
             "discarded_ligands": discarded,
+            "cycle_closure_error": cycle_error,
+            "cycle_closure_error_stderr": cycle_error_stderr,
+            "edge_error": edge_error,
+            "edge_error_stderr": edge_error_stderr,
+            # rows and columns follow ligand_order, so the two travel together
+            "covariance_matrix": estimator.covariance_matrix,
+            "ligand_order": estimator.ligand_order,
         }
 
-        return AnalysisResults(results, free_energies, _dg_records(femap), statistics)
+        return AnalysisResults(results, free_energies, dg, statistics)
