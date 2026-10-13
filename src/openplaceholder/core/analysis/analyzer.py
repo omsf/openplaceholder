@@ -36,14 +36,15 @@ def _leg_estimate(transformation: Transformation, dag_result: ProtocolDAGResult)
     result = transformation.protocol.gather([dag_result])
     estimate: Quantity = result.get_estimate()
     uncertainty: Quantity = result.get_uncertainty()
-    individual = result.get_individual_estimates()
 
     if uncertainty.m == 0.0:
-        # a single repeat has no unc so fall back to MBAR error
+        # a single repeat has no unc so fall back to MBAR error, which only a
+        # protocol reporting per repeat estimates can offer
+        individual = result.get_individual_estimates()
         uncertainty = sum(error for _, error in individual) / len(individual)
         logger.debug("%s: no std across repeats, using MBAR error %s", label, uncertainty)
     else:
-        logger.debug("%s: using the std across %d repeats, %s", label, len(individual), uncertainty)
+        logger.debug("%s: using the std across %d repeats, %s", label, result.n_protocol_dag_results, uncertainty)
 
     return estimate, uncertainty
 
