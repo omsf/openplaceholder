@@ -82,8 +82,6 @@ class CinnabarAnalyzer(Analyzer):
 
         femap = _femap(connected)
         statistics = {
-            "n_ligands": femap.n_ligands,
-            "n_edges": femap.n_edges,
             "discarded_ligands": discarded,
         }
 
