@@ -59,6 +59,7 @@ def extract_free_energies(results: SimulationResults) -> list[dict[str, Any]]:
     ValueError
         When a ligand pair carries more than one leg of the same phase.
     """
+    # ligand pair -> phase -> (free energy, uncertainty).
     legs: dict[tuple[str, str], dict[str, tuple[Quantity, Quantity]]] = defaultdict(dict)
 
     for transformation, dag_result in results:
