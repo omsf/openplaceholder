@@ -226,3 +226,27 @@ def make_simulation_results(
             legs.append(make_leg(ligand_a, ligand_b, phase, free_energy, ok=name not in failed, **leg_options))
 
     return SimulationResults(legs)
+
+
+def make_network_results() -> SimulationResults:
+    """A network carrying the pitfalls an analyzer has to survive.
+
+    Cycles over ``a b c d``, a pendant ``g`` whose solvent leg failed, and
+    ``e f`` reachable only from each other. Each leg reports the relative free
+    energy plus one, against a solvent leg of one, so every pair is exact.
+    """
+    # the pairs are deliberately not in alphabetical order of first appearance,
+    # so that anything reordering the ligands shows up rather than cancelling
+    edges = [
+        ("a", "c", 1.0),
+        ("a", "d", 1.5),  # closes the a c d cycle exactly
+        ("b", "c", 1.0),
+        ("b", "d", 2.0),  # leaves the b c d cycle 0.5 short, and negative
+        ("c", "d", 0.5),
+        ("d", "g", 2.0),  # the leg marked failed below
+        ("e", "f", 0.5),  # a component of its own
+    ]
+    return make_simulation_results(
+        [(a, b, ddg + 1.0, 1.0) for a, b, ddg in edges],
+        failed=("d_g_solvent",),
+    )
