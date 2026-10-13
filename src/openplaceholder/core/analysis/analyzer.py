@@ -2,7 +2,6 @@ import logging
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from typing import Any, Self
-import numpy as np
 
 from gufe import (
     ChemicalSystem,
@@ -15,7 +14,7 @@ from pint import Quantity
 
 from openplaceholder.core.configuration import ConfigBase
 from openplaceholder.core.interface import Module
-from openplaceholder.core.simulation.simulator import SimulationResults, ligand_names
+from openplaceholder.core.simulation.simulator import SimulationResults, _ligand_names
 
 logger = logging.getLogger(__name__)
 
@@ -42,12 +41,13 @@ def _leg_estimate(transformation: Transformation, dag_result: ProtocolDAGResult)
 
     if uncertainty.m == 0.0:
         # a single repeat has no unc so fall back to MBAR error
-        uncertainty = np.mean(error for _, error in result.get_individual_estimates())
+        individual = result.get_individual_estimates()
+        uncertainty = sum(error for _, error in individual) / len(individual)
 
     return estimate, uncertainty
 
 
-def extract_ddg(results: SimulationResults) -> list[dict[str, Any]]:
+def extract_free_energies(results: SimulationResults) -> list[dict[str, Any]]:
     """Pair up the legs of ``results`` into one relative free energy per ligand pair.
 
     Raises
@@ -62,8 +62,8 @@ def extract_ddg(results: SimulationResults) -> list[dict[str, Any]]:
             logger.warning("dropping failed leg %s", transformation.name or transformation.key)
             continue
 
-        ligands_a = sorted(ligand_names(transformation.stateA))
-        ligands_b = sorted(ligand_names(transformation.stateB))
+        ligands_a = sorted(_ligand_names(transformation.stateA))
+        ligands_b = sorted(_ligand_names(transformation.stateB))
         if len(ligands_a) != 1 or len(ligands_b) != 1:
             raise ValueError(f"expected one ligand per state, found {ligands_a} -> {ligands_b}")
 
