@@ -72,11 +72,12 @@ def _mean_stderr(values: list[Quantity]) -> tuple[Quantity | None, Quantity | No
     if len(magnitudes) == 0:
         return None, None
 
-    mean = np.mean(magnitudes) * unit.kilocalorie_per_mole
+    mean = float(np.mean(magnitudes)) * unit.kilocalorie_per_mole
     if len(magnitudes) == 1:
         return mean, None
 
-    return mean, np.std(magnitudes, ddof=1) / len(magnitudes) ** 0.5 * unit.kilocalorie_per_mole
+    stderr = float(np.std(magnitudes, ddof=1)) / len(magnitudes) ** 0.5
+    return mean, stderr * unit.kilocalorie_per_mole
 
 
 def _cycle_closures(femap: FEMap) -> list[dict[str, Any]]:
