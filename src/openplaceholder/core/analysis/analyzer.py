@@ -14,7 +14,11 @@ from pint import Quantity
 
 from openplaceholder.core.configuration import ConfigBase
 from openplaceholder.core.interface import Module
-from openplaceholder.core.simulation.simulator import SimulationResults, _ligand_names
+from openplaceholder.core.simulation.simulator import (
+    SimulationResults,
+    _ligand_names,
+    _phase,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -24,13 +28,6 @@ class AnalyzerConfigBase(ConfigBase): ...
 
 class NoResultsError(Exception):
     """When ``SimulationResults`` holds nothing that can be analyzed."""
-
-
-def _phase(system: ChemicalSystem) -> str:
-    """Which leg of the thermodynamic cycle ``system`` belongs to."""
-    if list(system.get_components_of_type(ProteinComponent)):
-        return "complex"
-    return "solvent"
 
 
 def _leg_estimate(transformation: Transformation, dag_result: ProtocolDAGResult) -> tuple[Quantity, Quantity]:
@@ -52,13 +49,7 @@ def _leg_estimate(transformation: Transformation, dag_result: ProtocolDAGResult)
 
 
 def extract_free_energies(results: SimulationResults) -> list[dict[str, Any]]:
-    """Pair up the legs of ``results`` into one relative free energy per ligand pair.
-
-    Raises
-    ------
-    ValueError
-        When a ligand pair carries more than one leg of the same phase.
-    """
+    """Pair up the legs of ``results`` into one relative free energy per ligand pair."""
     # ligand pair -> phase -> (free energy, uncertainty).
     legs: dict[tuple[str, str], dict[str, tuple[Quantity, Quantity]]] = defaultdict(dict)
 
@@ -67,16 +58,10 @@ def extract_free_energies(results: SimulationResults) -> list[dict[str, Any]]:
             logger.warning("dropping failed leg %s", transformation.name or transformation.key)
             continue
 
-        ligands_a = sorted(_ligand_names(transformation.stateA))
-        ligands_b = sorted(_ligand_names(transformation.stateB))
-        if len(ligands_a) != 1 or len(ligands_b) != 1:
-            raise ValueError(f"expected one ligand per state, found {ligands_a} -> {ligands_b}")
-
-        pair = (ligands_a[0], ligands_b[0])
-        phase = _phase(transformation.stateA)
-        if phase in legs[pair]:
-            raise ValueError(f"{pair[0]} -> {pair[1]} carries more than one {phase} leg")
-        legs[pair][phase] = _leg_estimate(transformation, dag_result)
+        # the mapper guarantees one ligand per state and one leg per phase
+        (ligand_a,) = _ligand_names(transformation.stateA)
+        (ligand_b,) = _ligand_names(transformation.stateB)
+        legs[(ligand_a, ligand_b)][_phase(transformation.stateA)] = _leg_estimate(transformation, dag_result)
 
     records = []
     for pair in sorted(legs):
