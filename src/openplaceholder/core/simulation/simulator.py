@@ -6,6 +6,7 @@ import networkx as nx
 from gufe import (
     AlchemicalNetwork,
     ChemicalSystem,
+    ProteinComponent,
     SmallMoleculeComponent,
     Transformation,
 )
@@ -35,6 +36,13 @@ class DisconnectedNetworkError(Exception):
 
 def _ligand_names(system: ChemicalSystem) -> set[str]:
     return {c.name for c in system.get_components_of_type(SmallMoleculeComponent)}
+
+
+def _phase(system: ChemicalSystem) -> str:
+    """Which leg of the thermodynamic cycle ``system`` belongs to."""
+    if list(system.get_components_of_type(ProteinComponent)):
+        return "complex"
+    return "solvent"
 
 
 def _ligand_components(network: AlchemicalNetwork) -> list[set[str]]:
