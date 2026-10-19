@@ -97,6 +97,24 @@ class SimulationResults(GufeTokenizable):  # type: ignore
         """Whether every transformation completed without failures."""
         return self._ok
 
+    @classmethod
+    def merge(cls, results: Iterable[Self]) -> Self:
+        """Merge ``SimulationResult`` instances.
+
+        Parameters
+        ----------
+        results:
+            Iterable of ``SimulationResults`` instances to merge.
+
+        Returns
+        -------
+        ``SimulationResult`` instance containing all ``Transformation`` and ``ProtocolDAGResult`` instances.
+        """
+        new: list[tuple[Transformation, ProtocolDAGResult]] = []
+        for result in results:
+            new.extend(iter(result))
+        return cls(new)
+
 
 class Simulator(Module, ABC):
     """Simulator abstract class.

@@ -52,6 +52,10 @@ ph = 7.0
 
 [assembly.mapping]
 implementation = "openplaceholder.impl.mappers:LOMAPMapper"
+
+[simulation.simulator]
+implementation = "openplaceholder.impl.simulators:OpenFESimulator"
+simulation_directory = "./outdir/"
 """
 
 

@@ -10,6 +10,7 @@ from openplaceholder.core.loader import _build_plugin
 from openplaceholder.core.selection.normalizer import Normalizer
 from openplaceholder.core.selection.selector import Selector
 from openplaceholder.core.selection.validator import Validator
+from openplaceholder.core.simulation.simulator import Simulator
 
 
 class Stage(IntEnum):
@@ -60,7 +61,7 @@ class Pipeline:
         config_data: dict[Any, Any],
         allow_partial: bool = False,
         lower: Stage = Stage.GENERATOR,
-        upper: Stage = Stage.MAPPER,
+        upper: Stage = Stage.SIMULATOR,
     ) -> Self:
         """Construct a Pipeline instance from configuration data.
 
@@ -159,6 +160,13 @@ class Pipeline:
         """The Mapper in the pipeline."""
         if mapper := self._get_plugin_type(Mapper):  # type: ignore[type-abstract]
             return mapper[0]
+        return None
+
+    @property
+    def simulator(self) -> Simulator | None:
+        """The Simulator in the pipeline."""
+        if simulator := self._get_plugin_type(Simulator):  # type: ignore[type-abstract]
+            return simulator[0]
         return None
 
     def __iter__(self) -> Iterator[Module]:
