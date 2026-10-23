@@ -2,8 +2,15 @@ from dataclasses import dataclass
 from enum import IntEnum, auto
 from typing import Any, Iterator, Self
 
+from openplaceholder.core.assembly.mapper import Mapper
+from openplaceholder.core.assembly.transformation import Transformation
+from openplaceholder.core.generation.generator import StructureGenerator
 from openplaceholder.core.interface import Module
 from openplaceholder.core.loader import _build_plugin
+from openplaceholder.core.selection.normalizer import Normalizer
+from openplaceholder.core.selection.selector import Selector
+from openplaceholder.core.selection.validator import Validator
+from openplaceholder.core.simulation.simulator import Simulator
 
 
 class Stage(IntEnum):
@@ -44,8 +51,9 @@ class PipelineResolutionError(Exception):
 
 @dataclass(frozen=True)
 class Pipeline:
+    """Container of configured plugins."""
 
-    plugins: tuple[Module, ...]
+    plugins: tuple[tuple[Stage, Module], ...]
 
     @classmethod
     def from_config_map(
@@ -53,7 +61,7 @@ class Pipeline:
         config_data: dict[Any, Any],
         allow_partial: bool = False,
         lower: Stage = Stage.GENERATOR,
-        upper: Stage = Stage.MAPPER,
+        upper: Stage = Stage.SIMULATOR,
     ) -> Self:
         """Construct a Pipeline instance from configuration data.
 
@@ -94,9 +102,9 @@ class Pipeline:
                     continue
                 raise PipelineResolutionError(f"Missing required config key: {'.'.join(path)}")
             if expect_list:
-                plugins.extend([_build_plugin(val) for val in stage_config])
+                plugins.extend([(Stage(stage), _build_plugin(val)) for val in stage_config])
             else:
-                plugins.append(_build_plugin(stage_config))
+                plugins.append((Stage(stage), _build_plugin(stage_config)))
 
             if last_added and (stage - last_added) > 1:
                 raise PipelineResolutionError("Provided stages are discontinuous")
@@ -104,5 +112,77 @@ class Pipeline:
 
         return cls(plugins=tuple(plugins))
 
+    def _get_plugin_type[T](self, plugin_type: type[T]) -> tuple[T, ...]:
+        """Collect all plugins that match a certain type."""
+        results: list[T] = []
+        for plugin in self.plugins:
+            if isinstance(plugin, plugin_type):
+                results.append(plugin)
+        return tuple(results)
+
+    @property
+    def generator(self) -> StructureGenerator | None:
+        """The StructureGenerator in the pipeline."""
+        if generator := self._get_plugin_type(StructureGenerator):  # type: ignore[type-abstract]
+            return generator[0]
+        return None
+
+    @property
+    def validators(self) -> tuple[Validator, ...] | None:
+        """The Validator instances in the pipeline."""
+        if validators := self._get_plugin_type(Validator):  # type: ignore[type-abstract]
+            return validators
+        return None
+
+    @property
+    def normalizers(self) -> tuple[Normalizer, ...] | None:
+        """The Normalizer instances in the pipeline."""
+        if normalizers := self._get_plugin_type(Normalizer):  # type: ignore[type-abstract]
+            return normalizers
+        return None
+
+    @property
+    def selector(self) -> Selector | None:
+        """The Selector in the pipeline."""
+        if selector := self._get_plugin_type(Selector):  # type: ignore[type-abstract]
+            return selector[0]
+        return None
+
+    @property
+    def transformations(self) -> tuple[Transformation, ...] | None:
+        """The Transformation instances in the pipeline."""
+        if transformations := self._get_plugin_type(Transformation):  # type: ignore[type-abstract]
+            return transformations
+        return None
+
+    @property
+    def mapper(self) -> Mapper | None:
+        """The Mapper in the pipeline."""
+        if mapper := self._get_plugin_type(Mapper):  # type: ignore[type-abstract]
+            return mapper[0]
+        return None
+
+    @property
+    def simulator(self) -> Simulator | None:
+        """The Simulator in the pipeline."""
+        if simulator := self._get_plugin_type(Simulator):  # type: ignore[type-abstract]
+            return simulator[0]
+        return None
+
+    def iter_range(self, lower: Stage = min(Stage), upper: Stage = max(Stage)) -> Iterator[Module]:
+        """Return an iterable of all modules within a range.
+
+        Parameters
+        ----------
+        lower
+            The lowest ``Stage`` considered.
+
+        upper
+            The highest ``Stage`` considered.
+        """
+        for stage, module in self.plugins:
+            if lower <= stage <= upper:
+                yield module
+
     def __iter__(self) -> Iterator[Module]:
-        yield from self.plugins
+        yield from map(lambda x: x[1], self.plugins)

@@ -28,6 +28,7 @@ dependencies = [
     "rdkit",
     "posebusters",
     "pdbfixer",
+    "prefect-ray",
     "biotite",
     "hydride",
 ]
@@ -50,6 +51,10 @@ dev = [
 ]
 docs = [
      "sphinx"
+]
+
+prod = [
+     "ray[default]"
 ]
 
 [build-system]
@@ -86,6 +91,7 @@ rdkit = "*"
 prolif = ">=2.1"
 pdbfixer = "*"
 biotite = "*"
+prefect = "*"
 
 [tool.pixi.pypi-dependencies]
 openplaceholder = { path = ".", editable = true }
@@ -110,7 +116,7 @@ python = "3.13.*"
 
 [tool.pixi.environments]
 default = { solve-group = "default" }
-dev = { features = ["dev"], solve-group = "default" }
+dev = { features = ["dev", "prod"], solve-group = "default" }
 docs = { features = ["docs"], solve-group = "default" }
 test = { features = ["test"], solve-group = "default" }
 py312 = { features = ["test", "py312"], solve-group = "py312" }
