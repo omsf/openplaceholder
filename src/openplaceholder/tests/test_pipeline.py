@@ -68,24 +68,24 @@ class TestResolvePipeline:
 
             pipeline = Pipeline.from_config_map(load_toml(config_path))
 
-            generator = pipeline.plugins[0]
+            generator = pipeline.plugins[0][1]
             assert isinstance(generator, OpenFold3Generator)
             assert isinstance(generator._config, OpenFold3GeneratorConfig)
             assert generator._config.sequence == "MGS"
             assert generator._config.ligands == {"lig_a": "C1=CC=CC=C1"}
 
-            assert isinstance(pipeline.plugins[1], PosebustersValidator)
+            assert isinstance(pipeline.plugins[1][1], PosebustersValidator)
 
-            assert isinstance(pipeline.plugins[2], BindingSiteAligner)
+            assert isinstance(pipeline.plugins[2][1], BindingSiteAligner)
 
-            selector = pipeline.plugins[3]
+            selector = pipeline.plugins[3][1]
             assert isinstance(selector, MPOSelector)
             assert "VolumeOverlapObjective" in selector._config.objectives
 
-            assert isinstance(pipeline.plugins[4], MaxVolumeSiteSubstitutionTransformation)
-            assert isinstance(pipeline.plugins[5], HeavyAtomAdditionTransformation)
-            protonation = pipeline.plugins[6]
+            assert isinstance(pipeline.plugins[4][1], MaxVolumeSiteSubstitutionTransformation)
+            assert isinstance(pipeline.plugins[5][1], HeavyAtomAdditionTransformation)
+            protonation = pipeline.plugins[6][1]
             assert isinstance(protonation, ComplexProtonationTransformation)
             assert protonation._config.ph == 7.0
 
-            assert isinstance(pipeline.plugins[7], LOMAPMapper)
+            assert isinstance(pipeline.plugins[7][1], LOMAPMapper)
