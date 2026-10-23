@@ -53,7 +53,7 @@ class PipelineResolutionError(Exception):
 class Pipeline:
     """Container of configured plugins."""
 
-    plugins: tuple[Module, ...]
+    plugins: tuple[tuple[Stage, Module], ...]
 
     @classmethod
     def from_config_map(
@@ -102,9 +102,9 @@ class Pipeline:
                     continue
                 raise PipelineResolutionError(f"Missing required config key: {'.'.join(path)}")
             if expect_list:
-                plugins.extend([_build_plugin(val) for val in stage_config])
+                plugins.extend([(Stage(stage), _build_plugin(val)) for val in stage_config])
             else:
-                plugins.append(_build_plugin(stage_config))
+                plugins.append((Stage(stage), _build_plugin(stage_config)))
 
             if last_added and (stage - last_added) > 1:
                 raise PipelineResolutionError("Provided stages are discontinuous")
@@ -169,5 +169,20 @@ class Pipeline:
             return simulator[0]
         return None
 
+    def iter_range(self, lower: Stage = min(Stage), upper: Stage = max(Stage)) -> Iterator[Module]:
+        """Return an iterable of all modules within a range.
+
+        Parameters
+        ----------
+        lower
+            The lowest ``Stage`` considered.
+
+        upper
+            The highest ``Stage`` considered.
+        """
+        for stage, module in self.plugins:
+            if lower <= stage <= upper:
+                yield module
+
     def __iter__(self) -> Iterator[Module]:
-        yield from self.plugins
+        yield from map(lambda x: x[1], self.plugins)

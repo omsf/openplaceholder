@@ -2,6 +2,8 @@ from gufe.network import AlchemicalNetwork
 from prefect import flow
 from prefect_ray import RayTaskRunner
 
+from openplaceholder.core.assembly.mapper import Mapper
+from openplaceholder.core.assembly.transformation import Transformation
 from openplaceholder.core.io import DataRef
 from openplaceholder.core.orchestration.prefect_tasks import (
     generate_task,
@@ -13,8 +15,10 @@ from openplaceholder.core.orchestration.prefect_tasks import (
     transform_structures,
     validate_structures,
 )
-from openplaceholder.core.pipeline import Pipeline
-from openplaceholder.core.simulation.simulator import SimulationResults
+from openplaceholder.core.pipeline import Pipeline, Stage
+from openplaceholder.core.selection.normalizer import Normalizer
+from openplaceholder.core.selection.selector import Selector
+from openplaceholder.core.simulation.simulator import SimulationResults, Simulator
 from openplaceholder.core.structure import StructureSeries, StructureSet
 from openplaceholder.impl.simulators import OpenFESimulator
 
@@ -25,7 +29,7 @@ OPHRefTokenizables = (
 
 @flow(name="openplaceholder-pipeline", task_runner=RayTaskRunner(init_kwargs={"num_cpus": 4}))
 def run_prefect_ray(pipeline: Pipeline, initial_data: OPHRefTokenizables | None = None) -> OPHRefTokenizables:
-    """Prefect flow for executing an entire OPH workflow.
+    """Prefect flow for executing an entire OPH workflow using ``ray``.
 
     Parameters
     ----------
@@ -41,7 +45,7 @@ def run_prefect_ray(pipeline: Pipeline, initial_data: OPHRefTokenizables | None 
 
     Raises
     ------
-    A TypeError is raised if the output type from a module's return is
+    A TypeErnror is raised if the output type from a module's return is
     unexpected.
 
     """
@@ -53,56 +57,57 @@ def run_prefect_ray(pipeline: Pipeline, initial_data: OPHRefTokenizables | None 
     if generator is None and validators is None and initial_data is None:
         raise ValueError("Initial data must be provided for steps after generation")
 
-    match (generator, validators):
-        # generator only, no initial data should be present
-        case (g, None) if g is not None:
+    data: OPHRefTokenizables
 
-            if initial_data is not None:
-                raise ValueError(f"Expected `None` for initial_data, got `{initial_data}`")
+    match (generator, validators, initial_data):
+        case (None, None, None):
+            raise ValueError("Initial data must be provided for steps after generation")
 
-            data: DataRef[StructureSet] = generate_task.submit(g).result()
+        # we were only given data, pass this along to the next step
+        case (None, None, d) if d is not None:
+            data = d
+
+        # generator only
+        case (g, None, None) if g is not None:
+            data = generate_task.submit(g).result()
             return data
 
-        case (None, v) if v is not None:
+        # validator only, missing the needed initial data
+        case (None, _, None):
+            raise ValueError
 
-            if initial_data is None:
-                raise ValueError("`initial_data` must not be `None`")
-
-            if initial_data.object_type is not StructureSet:
-                raise TypeError(
-                    f"Initial data has incompatible type. Expected `StructureSet`, got {initial_data.object_type}"
-                )
-
-            data = validate_structures.submit(v, initial_data).result()
-        case (g, v) if g is not None and v is not None:
+        case (g, v, None) if g is not None and v is not None:
             data = generate_validate_task.submit(g, v).result()
 
-    if normalizers := pipeline.normalizers:
-        if data.object_type is not StructureSet:
-            raise TypeError
-        data = normalize_structures.submit(normalizers, data).result()
+        case (None, v, d) if d is not None and d.object_type is StructureSet and v is not None:
+            data = validate_structures.submit(v, d).result()
 
-    if selector := pipeline.selector:
-        if data.object_type is not StructureSet:
-            raise TypeError
-        data = select_structures.submit(selector, data).result()
+        # given a generator with data
+        case (_, None, _):
+            raise ValueError("Initial data should not be  provided for a generator")
 
-    if transformations := pipeline.transformations:
-        for transformation in transformations:
-            if data.object_type is not StructureSeries:
-                raise TypeError
-            data = transform_structures.submit(transformation, data).result()
+        # anything else
+        case (_, _, _):
+            raise RuntimeError
 
-    if mapper := pipeline.mapper:
-        if data.object_type is not StructureSeries:
-            raise TypeError
-        data = map_structures.submit(mapper, data).result()
+    if not isinstance(data, DataRef):
+        raise ValueError
 
-    if simulator := pipeline.simulator:
-        if data.object_type is not AlchemicalNetwork:
-            raise ValueError(f"{data.object_type}")
-        if not isinstance(simulator, OpenFESimulator):
-            raise ValueError
-        data = simulate_network.submit(simulator, data).result()
+    assert isinstance(data, DataRef)
+
+    for module in pipeline.iter_range(lower=Stage.NORMALIZER):
+        match (module, data):
+            case (Normalizer(), d) if d.object_type is StructureSet:
+                data = normalize_structures.submit([module], d).result()
+            case (Selector(), d) if d.object_type is StructureSet:
+                data = select_structures.submit(module, d).result()
+            case (Transformation(), d) if d.object_type is StructureSeries:
+                data = transform_structures.submit(module, d).result()
+            case (Mapper(), d) if d.object_type is StructureSeries:
+                data = map_structures.submit(module, d).result()
+            case (Simulator(), d) if d.object_type is AlchemicalNetwork:
+                if not isinstance(module, OpenFESimulator):
+                    raise TypeError("Prefect orchestratin only supports OpenFESimulator")
+                data = simulate_network.submit(module, d).result()
 
     return data
