@@ -10,7 +10,7 @@ from gufe.tokenization import GufeKey, GufeTokenizable
 
 
 class DataRefSupportedSchemes(StrEnum):
-    FILE = auto()
+    file = auto()
 
 
 def get_gufe_data[T: GufeTokenizable](data_ref: DataRef[T]) -> T | None:
@@ -90,7 +90,7 @@ class DataRef[T: GufeTokenizable](GufeTokenizable):  # type: ignore
             raise ValueError("DataRef URI does not provide a scheme")
 
         if result.scheme not in DataRefSupportedSchemes.__members__:
-            raise ValueError("DataRef provides an unsupported URI")
+            raise ValueError(f"DataRef provides an unsupported URI: {result}")
 
     def get_data(self) -> T | None:
         return get_gufe_data(self)

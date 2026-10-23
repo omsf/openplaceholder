@@ -3,7 +3,9 @@
 from typing import Iterable
 
 from gufe.network import AlchemicalNetwork
+from gufe.tokenization import GufeKey
 from prefect import task
+from prefect.futures import PrefectFuture
 
 from openplaceholder.core.assembly.mapper import Mapper
 from openplaceholder.core.assembly.transformation import Transformation
@@ -15,7 +17,9 @@ from openplaceholder.core.orchestration.generate_validate_composite import (
 from openplaceholder.core.selection.normalizer import Normalizer
 from openplaceholder.core.selection.selector import Selector
 from openplaceholder.core.selection.validator import Validator
+from openplaceholder.core.simulation.simulator import SimulationResults
 from openplaceholder.core.structure import StructureSeries, StructureSet
+from openplaceholder.impl.simulators import OpenFESimulator
 
 
 @task(name="generate", retries=1)
@@ -107,6 +111,55 @@ def map_structures(mapper: Mapper, structures: DataRef[StructureSeries]) -> Data
     data = mapper.map(initial_data)
 
     if (ref := FSDataRefIO("alchemical_network.json").write(data)) is None:
+        raise RuntimeError
+
+    return ref
+
+
+@task(name="tranformation-simulate", retries=1)
+def simulate_transformation(
+    simulator: OpenFESimulator, network: DataRef[AlchemicalNetwork], transformation_key: GufeKey
+) -> DataRef[SimulationResults]:
+
+    if (network_data := network.get_data()) is None:
+        raise RuntimeError
+
+    for t in network_data.edges:
+        if t.key == transformation_key:
+            transformation = t
+            break
+    else:
+        raise ValueError(f"{t} not found in {network_data}")
+
+    transformation_result = simulator.simulate_transformation(transformation)
+    assert transformation_result is not None
+    sim_results = SimulationResults((transformation_result,))
+
+    if (ref := FSDataRefIO(f"./transform_cache/{sim_results.key}").write(sim_results)) is None:
+        raise RuntimeError
+
+    return ref
+
+
+@task(name="network-simulate", retries=1)
+def simulate_network(simulator: OpenFESimulator, network: DataRef[AlchemicalNetwork]) -> DataRef[SimulationResults]:
+
+    if (initial_data := get_gufe_data(network)) is None:
+        raise RuntimeError
+
+    futures: list[PrefectFuture[DataRef[SimulationResults]]] = []
+    for t in list(initial_data.edges):
+        f = simulate_transformation.submit(simulator, network, t._key)
+        futures.append(f)
+
+    results: list[SimulationResults] = []
+    for f in futures:
+        if result := f.result().get_data():
+            results.append(result)
+
+    merged_result = SimulationResults.merge(results)
+
+    if (ref := FSDataRefIO("sim_results.json").write(merged_result)) is None:
         raise RuntimeError
 
     return ref

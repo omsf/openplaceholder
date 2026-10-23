@@ -107,56 +107,8 @@ def run_serial(pipeline: Pipeline, initial_data: Any) -> GufeTokenizable:
                 data = plugin.simulate(data)
             case module, _:
                 raise TypeError(f"Unrecognized module and/or incompatible data {module}, {data}")
-    return data
 
-
-def run_prefect(pipeline: Pipeline, initial_data: Any) -> GufeTokenizable:
-    """Run the pipeline with Prefect orchestration.
-
-    Module run methods are wrapped in Prefect tasks enabling advanced
-    orchestration.
-
-    Parameters
-    ----------
-    pipeline
-        The Pipeline instance to execute.
-    initial_data
-        The first instance of data to be used by a module. The type of
-        this data depends on the first ``Module`` in the pipeline.
-
-    Returns
-    -------
-    The output type of the final module
-
-    """
-
-    from openplaceholder.core.orchestration.prefect_tasks import (
-        map_structures,
-        select_structures,
-        transform_structures,
-        validate_structures,
-    )
-
-    assert pipeline.validators is not None
-    assert pipeline.selector is not None
-    assert pipeline.transformations is not None
-    assert pipeline.mapper is not None
-
-    data: GufeTokenizable
-
-    data = validate_structures(pipeline.validators, initial_data)
-
-    assert isinstance(data, StructureSet)
-
-    data = select_structures(pipeline.selector, data)
-
-    for transformation in pipeline.transformations:
-        assert isinstance(data, StructureSeries)
-        data = transform_structures(transformation, data)
-
-    assert isinstance(data, StructureSeries)
-    data = map_structures(pipeline.mapper, data)
-
-    assert isinstance(data, GufeTokenizable)
+    if data is None:
+        raise TypeError
 
     return data
