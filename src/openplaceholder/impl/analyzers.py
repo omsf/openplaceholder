@@ -1,10 +1,11 @@
 import logging
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 import networkx as nx
 import numpy as np
 from cinnabar import FEMap, Measurement
+from cinnabar.estimators import MLEEstimatorResult
 from openff.units import unit
 from pint import Quantity
 
@@ -25,11 +26,17 @@ class SimulationAnalyzerConfig(AnalyzerConfigBase): ...
 
 
 def _largest_component(ddg: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[str]]:
-    """network analysis needs a fully connected network: keep the largest fc network."""
+    """Network analysis needs a fully connected network. Keep the largest fully connected network."""
     graph = nx.Graph([(record["stateA"], record["stateB"]) for record in ddg])
     # ties break on the sorted names so the choice does not move between runs
     keep = max(nx.connected_components(graph), key=lambda component: (len(component), sorted(component)))
-    connected = [record for record in ddg if record["stateA"] in keep and record["stateB"] in keep]
+
+    connected = []
+
+    for record in ddg:
+        if {record["stateA"], record["stateB"]}.issubset(keep):
+            connected.append(record)
+
     return connected, sorted(set(graph.nodes) - keep)
 
 
@@ -123,7 +130,7 @@ class CinnabarAnalyzer(Analyzer):
 
         dg = _dg_records(femap)
         # only recorded once the estimates above have been generated
-        estimator = femap.get_estimator_metadata("MLE")
+        estimator: MLEEstimatorResult = cast(MLEEstimatorResult, femap.get_estimator_metadata("MLE"))
 
         statistics = {
             "discarded_ligands": discarded,
