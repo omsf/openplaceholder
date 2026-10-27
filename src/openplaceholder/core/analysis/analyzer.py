@@ -1,7 +1,7 @@
 import logging
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from typing import Any, Self, cast
+from typing import Any, Self, TypeAlias, cast
 
 from gufe import Transformation
 from gufe.protocols import ProtocolDAGResult
@@ -17,6 +17,12 @@ from openplaceholder.core.simulation.simulator import (
 )
 
 logger = logging.getLogger(__name__)
+
+# ligand_a, ligand_b, ddg, uncertainty
+DDGRecord: TypeAlias = tuple[str, str, Quantity, Quantity]
+
+# ligand, dg, uncertainty
+DGRecord: TypeAlias = tuple[str, Quantity, Quantity]
 
 
 class AnalyzerConfigBase(ConfigBase): ...
@@ -47,7 +53,7 @@ def _leg_estimate(transformation: Transformation, dag_result: ProtocolDAGResult)
     return estimate, uncertainty
 
 
-def extract_free_energies(results: SimulationResults) -> list[dict[str, str | Quantity]]:
+def extract_free_energies(results: SimulationResults) -> list[DDGRecord]:
     """Pair up the legs of ``results`` into one relative free energy per ligand pair."""
     # ligand pair -> phase -> (free energy, uncertainty).
     # e.g. {("A", "B"): {"complex": (dG, std), "solvent": (dG, std)}}
@@ -63,7 +69,7 @@ def extract_free_energies(results: SimulationResults) -> list[dict[str, str | Qu
         (ligand_b,) = _ligand_names(transformation.stateB)
         legs[(ligand_a, ligand_b)][_phase(transformation.stateA)] = _leg_estimate(transformation, dag_result)
 
-    records: list[dict[str, str | Quantity]] = []
+    records: list[tuple[str, str, Quantity, Quantity]] = []
     for lig_a, lig_b in sorted(legs):
         phases = legs[(lig_a, lig_b)]
         if set(phases) != {"complex", "solvent"}:
@@ -75,14 +81,7 @@ def extract_free_energies(results: SimulationResults) -> list[dict[str, str | Qu
         ddg: Quantity = cast(Quantity, complex_dg - solvent_dg)  # type: ignore
         uncertainty: Quantity = cast(Quantity, (complex_error**2 + solvent_error**2) ** 0.5)  # type: ignore
 
-        records.append(
-            {
-                "stateA": lig_a,
-                "stateB": lig_b,
-                "ddg": ddg,
-                "uncertainty": uncertainty,
-            }
-        )
+        records.append((lig_a, lig_b, ddg, uncertainty))
 
     return records
 
@@ -93,8 +92,8 @@ class AnalysisResults(GufeTokenizable):  # type: ignore
     def __init__(
         self,
         simulation_results: SimulationResults,
-        ddg: list[dict[str, Any]],
-        dg: list[dict[str, Any]],
+        ddg: list[DDGRecord],
+        dg: list[DGRecord],
         statistics: dict[str, Any],
     ):
         """
@@ -126,7 +125,11 @@ class AnalysisResults(GufeTokenizable):  # type: ignore
 
     @classmethod
     def _from_dict(cls, dct: dict[Any, Any]) -> Self:
-        return cls(**dct)
+        cpy = dct.copy()
+        cpy["ddg"] = [(a, b, ddg, unc) for a, b, ddg, unc in cpy["ddg"]]
+        cpy["dg"] = [(lig, ddg, unc) for lig, ddg, unc in cpy["dg"]]
+
+        return cls(**cpy)
 
     @classmethod
     def _defaults(cls) -> dict[Any, Any]:
