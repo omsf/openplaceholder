@@ -1,16 +1,12 @@
 import logging
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from typing import Any, Self
+from typing import Any, Self, cast
 
-from gufe import (
-    ChemicalSystem,
-    ProteinComponent,
-    Transformation,
-)
+from gufe import Transformation
 from gufe.protocols import ProtocolDAGResult
 from gufe.tokenization import GufeTokenizable
-from pint import Quantity
+from openff.units.units import Quantity
 
 from openplaceholder.core.configuration import ConfigBase
 from openplaceholder.core.interface import Module
@@ -32,14 +28,16 @@ class NoResultsError(Exception):
 
 def _leg_estimate(transformation: Transformation, dag_result: ProtocolDAGResult) -> tuple[Quantity, Quantity]:
     """Predicted free energy of one leg, paired with its uncertainty."""
-    label = transformation.name or transformation.key
+    label = transformation.name or str(transformation.key)
     result = transformation.protocol.gather([dag_result])
     estimate: Quantity = result.get_estimate()
     uncertainty: Quantity = result.get_uncertainty()
 
     if uncertainty.m == 0.0:
-        # a single repeat has no unc so fall back to MBAR error, which only a
-        # protocol reporting per repeat estimates can offer
+        # a single repeat has no uncertainty so fall back to MBAR
+        # error, which only a protocol reporting per repeat estimates
+        # can offer. Note that only RelativeHybridTopologyProtocolResult
+        # has the `get_individual_estimate` method
         individual = result.get_individual_estimates()
         uncertainty = sum(error for _, error in individual) / len(individual)
         logger.debug("%s: no std across repeats, using MBAR error %s", label, uncertainty)
@@ -49,9 +47,10 @@ def _leg_estimate(transformation: Transformation, dag_result: ProtocolDAGResult)
     return estimate, uncertainty
 
 
-def extract_free_energies(results: SimulationResults) -> list[dict[str, Any]]:
+def extract_free_energies(results: SimulationResults) -> list[dict[str, str | Quantity]]:
     """Pair up the legs of ``results`` into one relative free energy per ligand pair."""
     # ligand pair -> phase -> (free energy, uncertainty).
+    # e.g. {("A", "B"): {"complex": (dG, std), "solvent": (dG, std)}}
     legs: dict[tuple[str, str], dict[str, tuple[Quantity, Quantity]]] = defaultdict(dict)
 
     for transformation, dag_result in results:
@@ -64,21 +63,24 @@ def extract_free_energies(results: SimulationResults) -> list[dict[str, Any]]:
         (ligand_b,) = _ligand_names(transformation.stateB)
         legs[(ligand_a, ligand_b)][_phase(transformation.stateA)] = _leg_estimate(transformation, dag_result)
 
-    records = []
-    for pair in sorted(legs):
-        phases = legs[pair]
+    records: list[dict[str, str | Quantity]] = []
+    for lig_a, lig_b in sorted(legs):
+        phases = legs[(lig_a, lig_b)]
         if set(phases) != {"complex", "solvent"}:
-            logger.warning("dropping %s -> %s, only the %s leg is usable", *pair, *sorted(phases))
+            logger.warning("dropping %s -> %s, only the %s leg is usable", lig_a, lig_b, *sorted(phases))
             continue
 
         complex_dg, complex_error = phases["complex"]
         solvent_dg, solvent_error = phases["solvent"]
+        ddg: Quantity = cast(Quantity, complex_dg - solvent_dg)  # type: ignore
+        uncertainty: Quantity = cast(Quantity, (complex_error**2 + solvent_error**2) ** 0.5)  # type: ignore
+
         records.append(
             {
-                "stateA": pair[0],
-                "stateB": pair[1],
-                "ddg": complex_dg - solvent_dg,
-                "uncertainty": (complex_error**2 + solvent_error**2) ** 0.5,
+                "stateA": lig_a,
+                "stateB": lig_b,
+                "ddg": ddg,
+                "uncertainty": uncertainty,
             }
         )
 

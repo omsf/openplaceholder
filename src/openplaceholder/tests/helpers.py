@@ -79,8 +79,6 @@ TER
 END
 """
 
-KCAL = unit.kilocalorie_per_mole
-
 
 class StubProtocolResult(ProtocolResult):  # type: ignore
     """A ``ProtocolResult`` that reports the estimate it was handed."""
@@ -133,7 +131,7 @@ def _tiny_protein() -> ProteinComponent:
     with tempfile.TemporaryDirectory() as directory:
         path = Path(directory) / "tiny.pdb"
         path.write_text(TINY_PROTEIN_PDB)
-        return ProteinComponent.from_pdb_file(str(path), name="tiny")
+        return ProteinComponent.from_pdb_file(path, name="tiny")
 
 
 @lru_cache(maxsize=None)
@@ -176,9 +174,9 @@ def make_leg(
 
     stub = StubProtocolUnit(name="stub")
     outputs = {
-        "estimate": free_energy * KCAL,
-        "uncertainty": repeat_std * KCAL,
-        "individual": [(free_energy * KCAL, mbar_error * KCAL)],
+        "estimate": free_energy * unit.kilocalorie_per_mole,
+        "uncertainty": repeat_std * unit.kilocalorie_per_mole,
+        "individual": [(free_energy * unit.kilocalorie_per_mole, mbar_error * unit.kilocalorie_per_mole)],
     }
     result: ProtocolUnitResult | ProtocolUnitFailure
     if ok:
