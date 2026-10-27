@@ -3,6 +3,7 @@ from typing import Any
 import numpy as np
 import pytest
 from gufe.tokenization import TOKENIZABLE_REGISTRY
+from openff.units import Quantity, unit
 
 from openplaceholder.core.analysis.analyzer import (
     AnalysisResults,
@@ -17,7 +18,6 @@ from openplaceholder.impl.analyzers import (
     _mean_stderr,
 )
 from openplaceholder.tests.helpers import (
-    KCAL,
     make_network_results,
     make_simulation_results,
 )
@@ -34,19 +34,28 @@ def _pairs(records: list[dict[str, Any]]) -> dict[tuple[str, str], dict[str, Any
 class TestExtractFreeEnergies:
 
     def test_ddg_is_the_complex_leg_less_the_solvent_leg(self) -> None:
-        (record,) = extract_free_energies(make_simulation_results([("a", "b", -3.0, -1.0)], mbar_error=0.3))
+        simulation_results = make_simulation_results([("a", "b", -3.0, -1.0)], mbar_error=0.3)
+        records = extract_free_energies(simulation_results)
 
-        assert record["ddg"] == -2.0 * KCAL
+        assert len(records) == 1
+        record = records[0]
+
+        assert record["ddg"] == -2.0 * unit.kilocalorie_per_mole
         # the legs' uncertainties add in quadrature
-        assert record["uncertainty"].m == pytest.approx((2 * 0.3**2) ** 0.5)
+        assert isinstance(uncertainty := record["uncertainty"], Quantity)
+        assert uncertainty.m == pytest.approx((2 * 0.3**2) ** 0.5)
 
     @pytest.mark.parametrize("repeat_std, per_leg", [(0.0, 0.3), (0.5, 0.5)])
     def test_mbar_error_stands_in_without_a_spread(self, repeat_std: float, per_leg: float) -> None:
         """A single repeat has no spread, so the MBAR error is used instead."""
-        results = make_simulation_results([("a", "b", -3.0, -1.0)], repeat_std=repeat_std, mbar_error=0.3)
-        (record,) = extract_free_energies(results)
+        simulation_results = make_simulation_results([("a", "b", -3.0, -1.0)], repeat_std=repeat_std, mbar_error=0.3)
+        records = extract_free_energies(simulation_results)
 
-        assert record["uncertainty"].m == pytest.approx((2 * per_leg**2) ** 0.5)
+        assert len(records) == 1
+        record = records[0]
+
+        assert isinstance(uncertainty := record["uncertainty"], Quantity)
+        assert uncertainty.m == pytest.approx((2 * per_leg**2) ** 0.5)
 
     def test_failed_leg_drops_only_its_own_pair(self) -> None:
         pairs = _pairs(extract_free_energies(make_network_results()))
@@ -77,19 +86,19 @@ class TestCinnabarAnalyzer:
 class TestStatistics:
 
     def test_mean_stderr(self) -> None:
-        mean, stderr = _mean_stderr([0.5 * KCAL, 0.0 * KCAL])
+        mean, stderr = _mean_stderr([0.5 * unit.kilocalorie_per_mole, 0.0 * unit.kilocalorie_per_mole])
 
         assert mean is not None and mean.m == pytest.approx(0.25)
         assert stderr is not None and stderr.m == pytest.approx(0.25)
 
     def test_cycle_closure_errors_are_magnitudes(self) -> None:
         """A signed closure must never reach the mean, where it would cancel."""
-        assert [error.m for error in _cycle_closure_errors([{"closure": -0.5 * KCAL}])] == [0.5]
+        assert [error.m for error in _cycle_closure_errors([{"closure": -0.5 * unit.kilocalorie_per_mole}])] == [0.5]
 
     @pytest.mark.parametrize("values", [[], [0.5]])
     def test_stderr_absent_without_a_spread(self, values: list[float]) -> None:
         """numpy would answer NaN here, which JSON cannot represent."""
-        assert _mean_stderr([value * KCAL for value in values])[1] is None
+        assert _mean_stderr([value * unit.kilocalorie_per_mole for value in values])[1] is None
 
     def test_cycle_statistics_absent_without_cycles(self) -> None:
         """A minimal spanning network has no cycles to close."""
