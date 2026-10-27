@@ -1,4 +1,5 @@
 from typing import Any
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -132,12 +133,10 @@ class TestAnalysisResults:
         analysis = _analyzer().analyze(make_network_results())
         content = analysis.to_json()
 
-        # gufe returns the same object from its registry, so clear it to make
-        # the restore go through the serialized form rather than the cache
-        TOKENIZABLE_REGISTRY.clear()
-        restored = AnalysisResults.from_json(content=content)
+        with patch.dict(TOKENIZABLE_REGISTRY, {}, clear=True):
+            restored = AnalysisResults.from_json(content=content)
 
-        assert restored is not analysis
-        assert [record["ddg"] for record in restored.ddg] == [record["ddg"] for record in analysis.ddg]
-        assert restored.statistics["discarded_ligands"] == ["e", "f"]
-        assert len(restored.simulation_results) == len(analysis.simulation_results)
+            assert restored is not analysis
+            assert [record["ddg"] for record in restored.ddg] == [record["ddg"] for record in analysis.ddg]
+            assert restored.statistics["discarded_ligands"] == ["e", "f"]
+            assert len(restored.simulation_results) == len(analysis.simulation_results)
