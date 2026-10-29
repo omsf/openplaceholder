@@ -84,6 +84,7 @@ openfe = ">=1.0"
 gufe = "*"
 rdkit = "*"
 prolif = ">=2.1"
+cinnabar = ">=0.6"
 pdbfixer = "*"
 biotite = "*"
 
