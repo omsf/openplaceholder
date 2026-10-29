@@ -203,7 +203,7 @@ def make_simulation_results(
     failed: Iterable[str] = (),
     **leg_options: Any,
 ) -> SimulationResults:
-    """A ready to analyze ``SimulationResults`` with known free energies.
+    """A ready to analyze ``SimulationResults`` instance with known free energies.
 
     Parameters
     ----------
@@ -211,8 +211,10 @@ def make_simulation_results(
         ``(ligand_a, ligand_b, complex_dg, solvent_dg)`` per ligand pair, in
         kcal/mol, so the relative free energy of the pair is exactly their
         difference.
+
     failed
         Leg names to mark as failed, each ``f"{ligand_a}_{ligand_b}_{phase}"``.
+
     leg_options
         Passed through to ``make_leg``, e.g. ``repeat_std``.
     """
@@ -243,8 +245,9 @@ def make_network_results() -> SimulationResults:
         ("c", "d", 0.5),
         ("d", "g", 2.0),  # the leg marked failed below
         ("e", "f", 0.5),  # a component of its own
+        ("g", "h", 1.0),  # a dangling, passing edge
+        ("g", "i", 0.5),  # a dangling, failing edge
     ]
     return make_simulation_results(
-        [(a, b, ddg + 1.0, 1.0) for a, b, ddg in edges],
-        failed=("d_g_solvent",),
+        [(a, b, ddg + 1.0, 1.0) for a, b, ddg in edges], failed=("d_g_solvent", "g_i_complex")
     )

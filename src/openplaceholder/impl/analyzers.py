@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 class SimulationAnalyzerConfig(AnalyzerConfigBase): ...
 
 
-def _largest_component(ddg: list[DDGRecord]) -> tuple[list[DDGRecord], list[str]]:
+def _largest_component(ddg: list[DDGRecord]) -> tuple[list[DDGRecord], set[str]]:
     """Network analysis needs a fully connected network. Keep the largest fully connected network."""
     graph = nx.Graph([(fe[0], fe[1]) for fe in ddg])
     # ties break on the sorted names so the choice does not move between runs
@@ -38,7 +38,7 @@ def _largest_component(ddg: list[DDGRecord]) -> tuple[list[DDGRecord], list[str]
         if {fe[0], fe[1]}.issubset(keep):
             connected.append(fe)
 
-    return connected, sorted(set(graph.nodes) - keep)
+    return connected, set(graph.nodes) - keep
 
 
 class CinnabarAnalyzer(Analyzer):
@@ -49,12 +49,17 @@ class CinnabarAnalyzer(Analyzer):
     def _setup(self) -> None: ...
 
     def _analyze(self, results: SimulationResults) -> AnalysisResults:
-        free_energies = extract_free_energies(results)
+        dropped = set()
+        free_energies, _dropped = extract_free_energies(results)
+        dropped |= _dropped
+
         if len(free_energies) == 0:
             raise NoResultsError("no ligand pair has both of its legs")
 
         connected, discarded = _largest_component(free_energies)
-        if discarded:
+        dropped |= discarded
+
+        if len(discarded) > 0:
             logger.warning("estimating without %s, disconnected from the network", ", ".join(discarded))
 
         femap = self._femap(connected)
@@ -72,8 +77,9 @@ class CinnabarAnalyzer(Analyzer):
         # only recorded once the estimates above have been generated
         estimator: MLEEstimatorResult = cast(MLEEstimatorResult, femap.get_estimator_metadata("MLE"))
 
-        statistics = {
-            "discarded_ligands": discarded,
+        meta = {}
+        meta["statistics"] = {
+            "discarded_ligands": list(dropped),
             "cycle_closure_error": cycle_error,
             "cycle_closure_error_stderr": cycle_error_stderr,
             "edge_error": edge_error,
@@ -83,7 +89,7 @@ class CinnabarAnalyzer(Analyzer):
             "ligand_order": estimator.ligand_order,
         }
 
-        return AnalysisResults(results, free_energies, dg, statistics)
+        return AnalysisResults(results, self.__class__.__name__, free_energies, dg, meta)
 
     @staticmethod
     def _femap(free_energies: list[DDGRecord]) -> FEMap:
