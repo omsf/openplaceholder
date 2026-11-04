@@ -6,7 +6,7 @@ Each ligand (`A`, `B`, …, `n`) is run through its own `generator`. Every ligan
 fans out into `n seeds × n diffusion samples` inference replicates that are each
 gated by `validators.py`. The surviving replicates merge per ligand, and the
 per-ligand results merge together into `selector`. From there the pipeline is
-linear: `selector` → `transformations.py` → `mappers.py`.
+linear: `selector` → `transformations.py` → `mappers.py` → `simulators.py`.
 
 ```text
                               validators.py
@@ -19,6 +19,14 @@ Ligand B ──> generator ──┼──> rep ──╫──┼──> merge 
                          ┌──> rep ──╫──┐             │                             │
 Ligand n ──> generator ──┼──> rep ──╫──┼──> merge n ─┘                             v
                          └──> ... ──╫──┘                                      mappers.py
+                                                                                   │
+                                                                           AlchemicalNetwork
+                                                                                   │
+                         ┌─────────────────────────────────────────────────────────┘
+                         │          simulators.py
+                         ├──> edge A→B ──┐
+                         ├──> edge B→C ──┼──> SimulationResults
+                         └──> ...     ───┘
 ```
 
 `rep` = one inference replicate; each generator fans out into `n seeds × n diffusion samples`
@@ -44,3 +52,7 @@ Component annotations:
   protein components and finetune structures as needed.
 - **mappers.py** — generate an alchemical network given settings defined by the user;
   produce an `AlchemicalNetwork`.
+- **simulators.py** — run each transformation (edge) of the `AlchemicalNetwork` and
+  collect the executed `ProtocolDAG`s into a `SimulationResults`. Edges are independent,
+  so this is a fan-out; the local simulator walks them sequentially on whichever hardware
+  OpenMM selects.
