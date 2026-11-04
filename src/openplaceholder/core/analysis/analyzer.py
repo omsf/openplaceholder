@@ -1,10 +1,7 @@
 import logging
 from abc import ABC, abstractmethod
-from collections import defaultdict
-from typing import Any, Self, TypeAlias, cast
+from typing import Any, Self, TypeAlias
 
-from gufe import Transformation
-from gufe.protocols import ProtocolDAGResult
 from gufe.tokenization import GufeTokenizable
 from openff.units.units import Quantity
 
@@ -12,8 +9,6 @@ from openplaceholder.core.configuration import ConfigBase
 from openplaceholder.core.interface import Module
 from openplaceholder.core.simulation.simulator import (
     SimulationResults,
-    _ligand_names,
-    _phase,
 )
 
 logger = logging.getLogger(__name__)
@@ -30,66 +25,6 @@ class AnalyzerConfigBase(ConfigBase): ...
 
 class NoResultsError(Exception):
     """When ``SimulationResults`` holds nothing that can be analyzed."""
-
-
-def _leg_estimate(transformation: Transformation, dag_result: ProtocolDAGResult) -> tuple[Quantity, Quantity]:
-    """Predicted free energy of one leg, paired with its uncertainty."""
-    label = transformation.name or str(transformation.key)
-    result = transformation.protocol.gather([dag_result])
-    estimate: Quantity = result.get_estimate()
-    uncertainty: Quantity = result.get_uncertainty()
-
-    if uncertainty.m == 0.0:
-        # a single repeat has no uncertainty so fall back to MBAR
-        # error. Note that only RelativeHybridTopologyProtocolResult
-        # has the `get_individual_estimate` method.
-        individual = result.get_individual_estimates()
-        uncertainty = sum(error for _, error in individual) / len(individual)
-        logger.debug("%s: no std across repeats, using MBAR error %s", label, uncertainty)
-    else:
-        logger.debug("%s: using the std across %d repeats, %s", label, result.n_protocol_dag_results, uncertainty)
-
-    return estimate, uncertainty
-
-
-def extract_free_energies(results: SimulationResults) -> tuple[list[DDGRecord], set[str]]:
-    """Pair up the legs of ``results`` into one relative free energy per ligand pair."""
-    # ligand pair -> phase -> (free energy, uncertainty).
-    # e.g. {("A", "B"): {"complex": (dG, std), "solvent": (dG, std)}}
-    legs: dict[tuple[str, str], dict[str, tuple[Quantity, Quantity]]] = defaultdict(dict)
-
-    for transformation, dag_result in results:
-        if not dag_result.ok():
-            logger.warning("dropping failed leg %s", transformation.name or transformation.key)
-            continue
-
-        # the mapper guarantees one ligand per state and one leg per phase
-        (ligand_a,) = _ligand_names(transformation.stateA)
-        (ligand_b,) = _ligand_names(transformation.stateB)
-        legs[(ligand_a, ligand_b)][_phase(transformation.stateA)] = _leg_estimate(transformation, dag_result)
-
-    all_ligands = set()
-    records: list[tuple[str, str, Quantity, Quantity]] = []
-    for lig_a, lig_b in sorted(legs):
-        all_ligands.add(lig_a)
-        all_ligands.add(lig_b)
-        phases = legs[(lig_a, lig_b)]
-        if set(phases) != {"complex", "solvent"}:
-            logger.warning("dropping %s -> %s, only the %s leg is usable", lig_a, lig_b, *sorted(phases))
-            continue
-
-        complex_dg, complex_error = phases["complex"]
-        solvent_dg, solvent_error = phases["solvent"]
-        ddg: Quantity = cast(Quantity, complex_dg - solvent_dg)  # type: ignore
-        uncertainty: Quantity = cast(Quantity, (complex_error**2 + solvent_error**2) ** 0.5)  # type: ignore
-
-        records.append((lig_a, lig_b, ddg, uncertainty))
-
-    remaining_ligands = set()
-    for lig_a, lig_b, *_ in records:
-        remaining_ligands.add(lig_a)
-        remaining_ligands.add(lig_b)
-    return records, remaining_ligands ^ all_ligands
 
 
 class AnalysisResults(GufeTokenizable):  # type: ignore

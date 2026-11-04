@@ -8,7 +8,6 @@ from openff.units import Quantity, unit
 from openplaceholder.core.analysis.analyzer import (
     AnalysisResults,
     NoResultsError,
-    extract_free_energies,
 )
 from openplaceholder.core.simulation.simulator import SimulationResults
 from openplaceholder.impl.analyzers import (
@@ -25,13 +24,14 @@ def default_cinnabar_analyzer() -> CinnabarAnalyzer:
     return CinnabarAnalyzer(SimulationAnalyzerConfig())
 
 
-class TestExtractFreeEnergies:
+class TestCinnabarAnalyzer:
 
     def test_ddg_equals_complex_minus_solvent(self) -> None:
-        simulation_results = make_simulation_results([("a", "b", -3.0, -1.0)], mbar_error=0.3)
-        records, _ = extract_free_energies(simulation_results)
+        # TODO: this fails when we repeat the edge too many times
+        simulation_results = make_simulation_results([("a", "b", -3.0, -1.0), ("a", "b", -3.0, -1.0)], mbar_error=0.3)
+        records, _ = CinnabarAnalyzer.extract_free_energies(simulation_results)
 
-        # we expect only 1 record
+        # we expect only 1 record, therefore should use the MBAR error
         assert len(records) == 1
         record = records[0]
 
@@ -39,11 +39,11 @@ class TestExtractFreeEnergies:
         assert isinstance(uncertainty := record[3], Quantity)
         assert uncertainty.m == pytest.approx((2 * 0.3**2) ** 0.5)
 
-    @pytest.mark.parametrize("repeat_std, per_leg", [(0.0, 0.3), (0.5, 0.5)])
-    def test_mbar_error_fallback(self, repeat_std: float, per_leg: float) -> None:
+    @pytest.mark.parametrize("per_leg", [0.3, 0.5])
+    def test_mbar_error_fallback(self, per_leg: float) -> None:
         """A single repeat has no spread, so the MBAR error is used."""
-        simulation_results = make_simulation_results([("a", "b", -3.0, -1.0)], repeat_std=repeat_std, mbar_error=0.3)
-        records, _ = extract_free_energies(simulation_results)
+        simulation_results = make_simulation_results([("a", "b", -3.0, -1.0)], mbar_error=per_leg)
+        records, _ = CinnabarAnalyzer.extract_free_energies(simulation_results)
 
         assert len(records) == 1
         record = records[0]
@@ -52,13 +52,10 @@ class TestExtractFreeEnergies:
         assert uncertainty.m == pytest.approx((2 * per_leg**2) ** 0.5)
 
     def test_failed_leg_drops_own_pair(self) -> None:
-        free_energies, dropped = extract_free_energies(make_network_results())
+        free_energies, dropped = CinnabarAnalyzer.extract_free_energies(make_network_results())
         assert len(free_energies) == 7
         # extract ligand pairs from DDGRecords
         assert dropped == {"i"}
-
-
-class TestCinnabarAnalyzer:
 
     def test_analyzer_name(self) -> None:
         analysis = default_cinnabar_analyzer().analyze(make_network_results())

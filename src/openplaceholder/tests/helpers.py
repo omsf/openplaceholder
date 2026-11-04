@@ -13,13 +13,15 @@ from gufe import (
     SolventComponent,
     Transformation,
 )
-from gufe.protocols import Protocol, ProtocolDAGResult, ProtocolUnit
-from gufe.protocols.protocol import ProtocolResult
+from gufe.protocols import ProtocolDAGResult, ProtocolUnit
 from gufe.protocols.protocolunit import ProtocolUnitFailure, ProtocolUnitResult
 from gufe.settings.models import Settings
 from openfe.protocols.openmm_rfe import RelativeHybridTopologyProtocol
 from openfe.protocols.openmm_rfe.equil_rfe_settings import (
     RelativeHybridTopologyProtocolSettings,
+)
+from openfe.protocols.openmm_rfe.hybridtop_protocol_results import (
+    RelativeHybridTopologyProtocolResult,
 )
 from openff.units import unit
 from rdkit import Chem
@@ -63,13 +65,6 @@ def read_gzip_file(file_path: str | Path) -> bytes:
     return content
 
 
-# --- analyzer fixtures ----------------------------------------------------
-#
-# An analyzer only ever asks a transformation's protocol to gather a result and
-# report an estimate, so the stubs below stand in for a simulated leg: the
-# estimate is supplied rather than computed, which keeps the free energies of a
-# test network exactly known.
-
 TINY_PROTEIN_PDB = """ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00  0.00           N
 ATOM      2  CA  ALA A   1       1.458   0.000   0.000  1.00  0.00           C
 ATOM      3  C   ALA A   1       2.009   1.420   0.000  1.00  0.00           C
@@ -80,17 +75,17 @@ END
 """
 
 
-class StubProtocolResult(ProtocolResult):  # type: ignore
+class StubProtocolResult(RelativeHybridTopologyProtocolResult):  # type: ignore
     """A ``ProtocolResult`` that reports the estimate it was handed."""
 
-    def get_estimate(self) -> Any:
-        return self.data["estimate"]
+    # def get_estimate(self) -> Quantity:
+    #     return self.data["estimate"]
 
-    def get_uncertainty(self) -> Any:
-        return self.data["uncertainty"]
+    # def get_uncertainty(self) -> Quantity:
+    #     return self.data["uncertainty"]
 
-    def get_individual_estimates(self) -> Any:
-        return self.data["individual"]
+    # def get_individual_estimates(self) -> Quantity:
+    #     return self.data["individual"]
 
 
 class StubProtocolUnit(ProtocolUnit):  # type: ignore
@@ -100,7 +95,7 @@ class StubProtocolUnit(ProtocolUnit):  # type: ignore
         raise NotImplementedError
 
 
-class StubProtocol(Protocol):  # type: ignore
+class StubProtocol(RelativeHybridTopologyProtocol):  # type: ignore
     """A protocol that reports whatever estimate its unit results carry."""
 
     result_cls = StubProtocolResult
@@ -119,10 +114,6 @@ class StubProtocol(Protocol):  # type: ignore
     ) -> list[ProtocolUnit]:
         _, _, _, _ = stateA, stateB, mapping, extends
         return [StubProtocolUnit(name="stub")]
-
-    def _gather(self, protocol_dag_results: Iterable[ProtocolDAGResult]) -> dict[str, Any]:
-        outputs = [result.outputs for dag in protocol_dag_results for result in dag.protocol_unit_results]
-        return {key: outputs[0][key] for key in ("estimate", "uncertainty", "individual")}
 
 
 @lru_cache(maxsize=1)
@@ -154,9 +145,10 @@ def make_leg(
     ligand_b: str,
     phase: str,
     free_energy: float,
-    repeat_std: float = 0.0,
     mbar_error: float = 0.2,
     ok: bool = True,
+    repeat_id: str | None = None,
+    generation: str | None = None,
 ) -> tuple[Transformation, ProtocolDAGResult]:
     """One simulated leg, reporting ``free_energy`` in kcal/mol.
 
@@ -174,15 +166,17 @@ def make_leg(
 
     stub = StubProtocolUnit(name="stub")
     outputs = {
-        "estimate": free_energy * unit.kilocalorie_per_mole,
-        "uncertainty": repeat_std * unit.kilocalorie_per_mole,
-        "individual": [(free_energy * unit.kilocalorie_per_mole, mbar_error * unit.kilocalorie_per_mole)],
+        "unit_estimate": free_energy * unit.kilocalorie_per_mole,
+        "unit_estimate_error": mbar_error * unit.kilocalorie_per_mole,
+        "repeat_id": repeat_id or "repeat_1",
+        "generation": generation or "generation_1",
     }
     result: ProtocolUnitResult | ProtocolUnitFailure
     if ok:
-        result = ProtocolUnitResult(source_key=stub.key, inputs={}, outputs=outputs)
+        result = ProtocolUnitResult(name="Analysis", source_key=stub.key, inputs={}, outputs=outputs)
     else:
         result = ProtocolUnitFailure(
+            name="Analysis",
             source_key=stub.key,
             inputs={},
             outputs={},
@@ -221,9 +215,26 @@ def make_simulation_results(
     failed = set(failed)
     legs = []
     for ligand_a, ligand_b, complex_dg, solvent_dg in edges:
-        for phase, free_energy in (("complex", complex_dg), ("solvent", solvent_dg)):
-            name = f"{ligand_a}_{ligand_b}_{phase}"
-            legs.append(make_leg(ligand_a, ligand_b, phase, free_energy, ok=name not in failed, **leg_options))
+        legs.append(
+            make_leg(
+                ligand_a,
+                ligand_b,
+                "complex",
+                complex_dg,
+                ok=f"{ligand_a}_{ligand_b}_complex" not in failed,
+                **leg_options,
+            )
+        )
+        legs.append(
+            make_leg(
+                ligand_a,
+                ligand_b,
+                "solvent",
+                solvent_dg,
+                ok=f"{ligand_a}_{ligand_b}_solvent" not in failed,
+                **leg_options,
+            )
+        )
 
     return SimulationResults(legs)
 
