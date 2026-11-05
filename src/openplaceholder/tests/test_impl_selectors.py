@@ -53,3 +53,35 @@ class TestMPOSelector:
         )
         groups = [[0, 1], [2, 3]]
         assert selector._optimize(matrix, groups) == [0, 2]
+
+    def test_bias_is_none_without_context(self) -> None:
+        matrix = np.zeros((4, 4))
+
+        assert MPOSelector._bias(matrix, [0, 1], chosen=[], pending=[]) is None
+
+    def test_bias_looks_ahead_to_undecided_groups(self) -> None:
+        """Without this the first batch has no signal and its pick is arbitrary."""
+        matrix = np.zeros((4, 4))
+        matrix[0, 2] = matrix[2, 0] = 1.0  # candidate 0 agrees with the pending group
+
+        bias = MPOSelector._bias(matrix, [0, 1], chosen=[], pending=[[2, 3]])
+
+        assert bias is not None
+        assert bias[0] > bias[1]
+
+    def test_first_ligand_is_no_longer_picked_arbitrarily(self) -> None:
+        """A mutually consistent pose per ligand must be recovered even when
+        every ligand lands in its own batch."""
+        selector = MPOSelector(MPOSelectorConfig(objectives={}))
+        per, ligands = 25, 4
+        groups = [list(range(i * per, (i + 1) * per)) for i in range(ligands)]
+        matrix = np.full((per * ligands, per * ligands), 0.1)
+        family = [group[7] for group in groups]
+        for i in family:
+            for j in family:
+                if i != j:
+                    matrix[i, j] = 0.9
+        np.fill_diagonal(matrix, 1.0)
+
+        assert [len(batch) for batch in selector._batch_groups(groups)] == [1] * ligands
+        assert sorted(selector._optimize_batched(matrix, groups)) == sorted(family)
