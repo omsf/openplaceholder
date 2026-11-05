@@ -18,7 +18,7 @@ Custom modules can be declared in the ``config.toml`` by providing a class path 
    implementation = "mycustommodules.validators:MyCustomValidator"
    option_1 = "custom config data"
 
-Essentially, OpenPlaceHolder makes no distinction between user defined modules and its own predefined modules.
+Essentially, OpenPlaceHolder makes no distinction between user-defined modules and its own predefined modules.
 
 Creating a module
 =================
@@ -49,8 +49,8 @@ Using the ``Validator`` module as an example, one only needs to implement a conf
         def _setup(self) -> None:
             pass
 
-        # Validator specific, this
-	def _validate_structure(self, structure: Structure) -> bool:
-	    """Custom procedure for single structure validation."""
+        # Validator specific
+        def _validate_structure(self, structure: Structure) -> bool:
+            """Custom procedure for single structure validation."""
 	    ...
 
