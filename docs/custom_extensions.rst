@@ -40,17 +40,17 @@ Using the ``Validator`` module as an example, one only needs to implement a conf
     class MyCustomValidator(Validator):
         """A custom validation module."""
 
-	# This annotation must be present. If absent,
-	# initialization will fail.
-	_config: MyCustomValidatorConfig
+        # This annotation must be present. If absent,
+        # initialization will fail.
+        _config: MyCustomValidatorConfig
 
         # any pre-processing steps, catch configuration
-	# errors here. Common to all modules.
+        # errors here. Common to all modules.
         def _setup(self) -> None:
             pass
 
         # Validator specific
-        def _validate_structure(self, structure: Structure) -> bool:
+	def _validate_structure(self, structure: Structure) -> bool:
             """Custom procedure for single structure validation."""
 	    ...
 
