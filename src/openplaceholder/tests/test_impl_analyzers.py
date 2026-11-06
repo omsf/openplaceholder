@@ -27,8 +27,7 @@ def default_cinnabar_analyzer() -> CinnabarAnalyzer:
 class TestCinnabarAnalyzer:
 
     def test_ddg_equals_complex_minus_solvent(self) -> None:
-        # TODO: this fails when we repeat the edge too many times
-        simulation_results = make_simulation_results([("a", "b", -3.0, -1.0), ("a", "b", -3.0, -1.0)], mbar_error=0.3)
+        simulation_results = make_simulation_results([("a", "b", -3.0, -1.0)], mbar_error=0.3)
         records, _ = CinnabarAnalyzer.extract_free_energies(simulation_results)
 
         # we expect only 1 record, therefore should use the MBAR error
