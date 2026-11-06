@@ -6,7 +6,8 @@ Each ligand (`A`, `B`, …, `n`) is run through its own `generator`. Every ligan
 fans out into `n seeds × n diffusion samples` inference replicates that are each
 gated by `validators.py`. The surviving replicates merge per ligand, and the
 per-ligand results merge together into `selector`. From there the pipeline is
-linear: `selector` → `transformations.py` → `mappers.py` → `simulators.py`.
+linear: `selector` → `transformations.py` → `mappers.py` → `simulators.py` →
+`analyzers.py`.
 
 ```text
                               validators.py
@@ -25,7 +26,7 @@ Ligand n ──> generator ──┼──> rep ──╫──┼──> merge 
                          ┌─────────────────────────────────────────────────────────┘
                          │          simulators.py
                          ├──> edge A→B ──┐
-                         ├──> edge B→C ──┼──> SimulationResults
+                         ├──> edge B→C ──┼──> SimulationResults ──> analyzers.py ──> AnalysisResults
                          └──> ...     ───┘
 ```
 
@@ -56,3 +57,8 @@ Component annotations:
   collect the executed `ProtocolDAG`s into a `SimulationResults`. Edges are independent,
   so this is a fan-out; the local simulator walks them sequentially on whichever hardware
   OpenMM selects.
+- **analyzers.py** — pair each ligand's complex and solvent legs into a relative free
+  energy, then estimate one absolute free energy per ligand across the network as a whole. Legs
+  that failed, and ligands left unreachable by them, are dropped so that the rest of the
+  network stays analyzable. Produces an `AnalysisResults` carrying the simulation results
+  it read, the per-pair and per-ligand free energies, and the network statistics.

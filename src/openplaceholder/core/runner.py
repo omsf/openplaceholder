@@ -3,6 +3,7 @@ from typing import Any
 
 from gufe.tokenization import GufeTokenizable
 
+from openplaceholder.core.analysis.analyzer import Analyzer
 from openplaceholder.core.assembly.mapper import Mapper
 from openplaceholder.core.assembly.transformation import Transformation
 from openplaceholder.core.generation.generator import (
@@ -57,6 +58,8 @@ def run_serial(pipeline: Pipeline, initial_data: Any) -> GufeTokenizable:
                 data = plugin.map(data)
             case Simulator():
                 data = plugin.simulate(data)
+            case Analyzer():
+                data = plugin.analyze(data)
             case _:
                 raise TypeError(f"Unrecognized module {plugin}")
     return data
