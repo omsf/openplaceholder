@@ -6,7 +6,7 @@ OpenPlaceHolder is an open source pipeline framework for generation, execution, 
 OpenPlaceHolder is released under the MIT license and developed at its `GitHub repository <https://github.com/omsf/openplaceholder>`_.
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :hidden:
 
    installation
