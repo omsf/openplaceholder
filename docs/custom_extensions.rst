@@ -21,7 +21,7 @@ Custom modules can be declared in the ``config.toml`` by providing a class path 
 Essentially, OpenPlaceHolder makes no distinction between user-defined modules and its own predefined modules.
 
 Creating a module
-=================
+-----------------
 
 Using the ``Validator`` module as an example, one only needs to implement a configuration class and two methods.
 
