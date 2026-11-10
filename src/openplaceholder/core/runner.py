@@ -4,6 +4,7 @@ from typing import Any
 from gufe.network import AlchemicalNetwork
 from gufe.tokenization import GufeTokenizable
 
+from openplaceholder.core.analysis.analyzer import Analyzer
 from openplaceholder.core.assembly.mapper import Mapper
 from openplaceholder.core.assembly.transformation import Transformation
 from openplaceholder.core.generation.generator import (
@@ -13,7 +14,7 @@ from openplaceholder.core.pipeline import Pipeline
 from openplaceholder.core.selection.normalizer import Normalizer
 from openplaceholder.core.selection.selector import Selector
 from openplaceholder.core.selection.validator import Validator
-from openplaceholder.core.simulation.simulator import Simulator
+from openplaceholder.core.simulation.simulator import SimulationResults, Simulator
 from openplaceholder.core.structure import StructureSeries, StructureSet
 
 logger = logging.getLogger(__name__)
@@ -105,10 +106,8 @@ def run_serial(pipeline: Pipeline, initial_data: Any) -> GufeTokenizable:
                 data = plugin.map(data)
             case Simulator(), AlchemicalNetwork():
                 data = plugin.simulate(data)
-            case module, _:
-                raise TypeError(f"Unrecognized module and/or incompatible data {module}, {data}")
-
-    if data is None:
-        raise TypeError
-
+            case Analyzer(), SimulationResults():
+                data = plugin.analyze(data)
+            case _:
+                raise TypeError(f"Unrecognized module {plugin}")
     return data
