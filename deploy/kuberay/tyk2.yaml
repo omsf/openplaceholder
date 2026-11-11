@@ -1,0 +1,45 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: oph-tyk2
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+      containers:
+        - name: driver
+          image: oph-kuberay:dev
+          imagePullPolicy: Never
+          workingDir: /data
+          command: ["python", "-u", "/opt/tyk2.py"]
+          env:
+            - name: HOME
+              value: /tmp
+            - name: PREFECT_API_URL
+              value: "http://prefect-server:4200/api"
+            - name: OPH_RAY_ADDRESS
+              value: "ray://oph-head-svc:10001"
+            - name: OPH_CONFIG
+              value: /opt/tyk2.toml
+            - name: OPH_GPUS_PER_EDGE
+              value: "1"
+            - name: OPH_GPUS_PER_GENERATION
+              value: "1"
+            - name: OPH_RUN_OPENFOLD
+              value: /data/.of3/run_openfold
+          resources:
+            requests:
+              cpu: "1"
+              memory: 2Gi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          hostPath:
+            path: /data
+            type: DirectoryOrCreate

@@ -1,0 +1,169 @@
+# Prefect API server, and a Ray cluster whose worker pods run the pipeline's edges.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prefect-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prefect-server
+  template:
+    metadata:
+      labels:
+        app: prefect-server
+    spec:
+      containers:
+        - name: server
+          image: prefecthq/prefect:3.8.6-python3.12
+          args: ["prefect", "server", "start", "--host", "0.0.0.0"]
+          env:
+            - name: PREFECT_HOME
+              value: /tmp/prefect
+          ports:
+            - containerPort: 4200
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prefect-server
+spec:
+  selector:
+    app: prefect-server
+  ports:
+    - port: 4200
+      targetPort: 4200
+---
+apiVersion: ray.io/v1
+kind: RayCluster
+metadata:
+  name: oph
+spec:
+  rayVersion: "2.60.0"
+  headGroupSpec:
+    rayStartParams:
+      # the head schedules nothing, so every edge has to land on a worker pod
+      num-cpus: "0"
+    template:
+      spec:
+        securityContext:
+          runAsUser: 1000
+          runAsGroup: 1000
+        containers:
+          - name: ray-head
+            image: oph-kuberay:dev
+            imagePullPolicy: Never
+            workingDir: /data
+            env:
+              - name: HOME
+                value: /tmp
+            resources:
+              requests:
+                cpu: "1"
+                memory: 2Gi
+              limits:
+                cpu: "2"
+                memory: 4Gi
+            volumeMounts:
+              - name: data
+                mountPath: /data
+        volumes:
+          - name: data
+            hostPath:
+              path: /data
+              type: DirectoryOrCreate
+  workerGroupSpecs:
+    - groupName: cpu
+      replicas: 2
+      minReplicas: 2
+      maxReplicas: 2
+      rayStartParams: {}
+      template:
+        spec:
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+          containers:
+            - name: ray-worker
+              image: oph-kuberay:dev
+              imagePullPolicy: Never
+              workingDir: /data
+              env:
+                - name: HOME
+                  value: /tmp
+                # two concurrent edges on a 4 CPU pod
+                - name: OPENMM_CPU_THREADS
+                  value: "2"
+              resources:
+                requests:
+                  cpu: "4"
+                  memory: 4Gi
+                limits:
+                  cpu: "4"
+                  memory: 8Gi
+              volumeMounts:
+                - name: data
+                  mountPath: /data
+          volumes:
+            - name: data
+              hostPath:
+                path: /data
+                type: DirectoryOrCreate
+    - groupName: gpu
+      replicas: 1
+      minReplicas: 1
+      maxReplicas: 1
+      rayStartParams:
+        # no device plugin locally to advertise nvidia.com/gpu
+        num-gpus: "1"
+      template:
+        spec:
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+          containers:
+            - name: ray-worker
+              image: oph-kuberay:dev
+              imagePullPolicy: Never
+              workingDir: /data
+              securityContext:
+                # the kind node already carries /dev/nvidia*; a real cluster
+                # requests nvidia.com/gpu instead of this
+                privileged: true
+              env:
+                - name: HOME
+                  value: /tmp
+                - name: LD_LIBRARY_PATH
+                  value: /data/.nvidia
+                - name: OPENFOLD_CACHE
+                  value: __OF3_CACHE__
+              resources:
+                requests:
+                  cpu: "2"
+                  memory: 4Gi
+                limits:
+                  cpu: "4"
+                  memory: 32Gi
+              volumeMounts:
+                - name: data
+                  mountPath: /data
+                - name: of3
+                  mountPath: __OF3_HOME__
+                  readOnly: true
+                - name: of3-cache
+                  mountPath: __OF3_CACHE__
+                  readOnly: true
+          volumes:
+            - name: data
+              hostPath:
+                path: /data
+                type: DirectoryOrCreate
+            # up.sh substitutes these paths and mounts them into the node
+            - name: of3
+              hostPath:
+                path: __OF3_HOME__
+                type: DirectoryOrCreate
+            - name: of3-cache
+              hostPath:
+                path: __OF3_CACHE__
+                type: DirectoryOrCreate

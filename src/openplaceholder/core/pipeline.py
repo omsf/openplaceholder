@@ -117,7 +117,7 @@ class Pipeline:
     def _get_plugin_type[T](self, plugin_type: type[T]) -> tuple[T, ...]:
         """Collect all plugins that match a certain type."""
         results: list[T] = []
-        for plugin in self.plugins:
+        for _, plugin in self.plugins:
             if isinstance(plugin, plugin_type):
                 results.append(plugin)
         return tuple(results)

@@ -1,11 +1,16 @@
+import os
+
 from gufe.network import AlchemicalNetwork
 from prefect import flow
 from prefect_ray import RayTaskRunner
+from prefect_ray.context import remote_options
 
+from openplaceholder.core.analysis.analyzer import AnalysisResults, Analyzer
 from openplaceholder.core.assembly.mapper import Mapper
 from openplaceholder.core.assembly.transformation import Transformation
 from openplaceholder.core.io import DataRef
 from openplaceholder.core.orchestration.prefect_tasks import (
+    analyze_results,
     generate_task,
     generate_validate_task,
     map_structures,
@@ -23,11 +28,26 @@ from openplaceholder.core.structure import StructureSeries, StructureSet
 from openplaceholder.impl.simulators import OpenFESimulator
 
 OPHRefTokenizables = (
-    DataRef[StructureSet] | DataRef[StructureSeries] | DataRef[AlchemicalNetwork] | DataRef[SimulationResults]
+    DataRef[StructureSet]
+    | DataRef[StructureSeries]
+    | DataRef[AlchemicalNetwork]
+    | DataRef[SimulationResults]
+    | DataRef[AnalysisResults]
 )
 
 
-@flow(name="openplaceholder-pipeline", task_runner=RayTaskRunner(init_kwargs={"num_cpus": 4}))
+_GPUS_PER_EDGE = int(os.environ.get("OPH_GPUS_PER_EDGE", "0"))
+_GPUS_PER_GENERATION = int(os.environ.get("OPH_GPUS_PER_GENERATION", "0"))
+
+
+def _task_runner() -> RayTaskRunner:
+    address = os.environ.get("OPH_RAY_ADDRESS")
+    if address:
+        return RayTaskRunner(address=address)
+    return RayTaskRunner(init_kwargs={"num_cpus": 4})
+
+
+@flow(name="openplaceholder-pipeline", task_runner=_task_runner())
 def run_prefect_ray(pipeline: Pipeline, initial_data: OPHRefTokenizables | None = None) -> OPHRefTokenizables:
     """Prefect flow for executing an entire OPH workflow using ``ray``.
 
@@ -69,7 +89,8 @@ def run_prefect_ray(pipeline: Pipeline, initial_data: OPHRefTokenizables | None 
 
         # generator only
         case (g, None, None) if g is not None:
-            data = generate_task.submit(g).result()
+            with remote_options(num_gpus=_GPUS_PER_GENERATION):
+                data = generate_task.submit(g).result()
             return data
 
         # validator only, missing the needed initial data
@@ -77,7 +98,8 @@ def run_prefect_ray(pipeline: Pipeline, initial_data: OPHRefTokenizables | None 
             raise ValueError
 
         case (g, v, None) if g is not None and v is not None:
-            data = generate_validate_task.submit(g, v).result()
+            with remote_options(num_gpus=_GPUS_PER_GENERATION):
+                data = generate_validate_task.submit(g, v).result()
 
         case (None, v, d) if d is not None and d.object_type is StructureSet and v is not None:
             data = validate_structures.submit(v, d).result()
@@ -108,6 +130,8 @@ def run_prefect_ray(pipeline: Pipeline, initial_data: OPHRefTokenizables | None 
             case (Simulator(), d) if d.object_type is AlchemicalNetwork:
                 if not isinstance(module, OpenFESimulator):
                     raise TypeError("Prefect orchestratin only supports OpenFESimulator")
-                data = simulate_network.submit(module, d).result()
+                data = simulate_network.submit(module, d, _GPUS_PER_EDGE).result()
+            case (Analyzer(), d) if d.object_type is SimulationResults:
+                data = analyze_results.submit(module, d).result()
 
     return data

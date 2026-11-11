@@ -6,7 +6,9 @@ from gufe.network import AlchemicalNetwork
 from gufe.tokenization import GufeKey
 from prefect import task
 from prefect.futures import PrefectFuture
+from prefect_ray.context import remote_options
 
+from openplaceholder.core.analysis.analyzer import AnalysisResults, Analyzer
 from openplaceholder.core.assembly.mapper import Mapper
 from openplaceholder.core.assembly.transformation import Transformation
 from openplaceholder.core.generation.generator import StructureGenerator
@@ -142,14 +144,17 @@ def simulate_transformation(
 
 
 @task(name="network-simulate", retries=1)
-def simulate_network(simulator: OpenFESimulator, network: DataRef[AlchemicalNetwork]) -> DataRef[SimulationResults]:
+def simulate_network(
+    simulator: OpenFESimulator, network: DataRef[AlchemicalNetwork], gpus_per_edge: int = 0
+) -> DataRef[SimulationResults]:
 
     if (initial_data := get_gufe_data(network)) is None:
         raise RuntimeError
 
     futures: list[PrefectFuture[DataRef[SimulationResults]]] = []
     for t in list(initial_data.edges):
-        f = simulate_transformation.submit(simulator, network, t._key)
+        with remote_options(num_gpus=gpus_per_edge):
+            f = simulate_transformation.submit(simulator, network, t._key)
         futures.append(f)
 
     results: list[SimulationResults] = []
@@ -160,6 +165,18 @@ def simulate_network(simulator: OpenFESimulator, network: DataRef[AlchemicalNetw
     merged_result = SimulationResults.merge(results)
 
     if (ref := FSDataRefIO("sim_results.json").write(merged_result)) is None:
+        raise RuntimeError
+
+    return ref
+
+
+@task(name="analyze", retries=1)
+def analyze_results(analyzer: Analyzer, results: DataRef[SimulationResults]) -> DataRef[AnalysisResults]:
+
+    if (initial_data := get_gufe_data(results)) is None:
+        raise RuntimeError
+
+    if (ref := FSDataRefIO("analysis.json").write(analyzer.analyze(initial_data))) is None:
         raise RuntimeError
 
     return ref

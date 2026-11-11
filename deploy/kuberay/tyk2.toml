@@ -1,0 +1,51 @@
+[generation.generator]
+implementation = "openplaceholder.impl.generator.openfold3:OpenFold3Generator"
+run_openfold_path = "run_openfold"
+n_diffusion_samples = 2
+generate_n_seeds = 2
+generator_directory = "/data/generator/tyk2"
+sequence = "MGSPASDPTVFHKRYLKKIRDLGEGHFGKVSLYCYDPTNDGTGEMVAVKALKADAGPQHRSGWKQEIDILRTLYHEHIIKYKGCCEDAGAASLQLVMEYVPLGSLRDYLPRHSIGLAQLLLFAQQICEGMAYLHAQHYIHRNLAARNVLLDNDRLVKIGDFGLAKAVPEGHEYYRVREDGDSPVFWYAPECLKEYKFYYASDVWSFGVTLYELLTHCDSSQSPPTKFLELIGIAQGQMTVLRLTELLERGERLPRPDKCPAEVYHLMKNCWETEASFRPTFENLIPILKTVHEKYRHHHHHH"
+
+[generation.generator.ligands]
+ejm_31 = 'CC(=O)Nc1cc(NC(=O)c2c(Cl)cccc2Cl)ccn1'
+ejm_42 = 'CCC(=O)Nc1cc(NC(=O)c2c(Cl)cccc2Cl)ccn1'
+ejm_43 = 'CC(C)C(=O)Nc1cc(NC(=O)c2c(Cl)cccc2Cl)ccn1'
+ejm_44 = 'CC(C)(C)C(=O)Nc1cc(NC(=O)c2c(Cl)cccc2Cl)ccn1'
+
+[[selection.validators]]
+implementation = "openplaceholder.impl.validators:PosebustersValidator"
+
+[[selection.validators]]
+implementation = "openplaceholder.impl.validators:StereoValidator"
+
+[[selection.normalizers]]
+implementation = "openplaceholder.impl.normalizers:BindingSiteAligner"
+radius = 6.0
+
+[selection.selector]
+implementation = "openplaceholder.impl.selector.mpo:MPOSelector"
+
+[selection.selector.objectives]
+VolumeOverlapObjective = { weight = 1.0 }
+IFPSimilarityObjective = { weight = 1.0 }
+
+[[assembly.transformations]]
+implementation = "openplaceholder.impl.transformations:MaxVolumeSiteSubstitutionTransformation"
+
+[[assembly.transformations]]
+implementation = "openplaceholder.impl.transformations:HeavyAtomAdditionTransformation"
+
+[[assembly.transformations]]
+implementation = "openplaceholder.impl.transformations:ComplexProtonationTransformation"
+ph = 7.0
+
+[assembly.mapping]
+implementation = "openplaceholder.impl.mappers:KartografMapper"
+
+[simulation.simulator]
+implementation = "openplaceholder.impl.simulators:OpenFESimulator"
+simulation_directory = "/data/simulations/tyk2"
+production_length_ns = 1.0
+
+[analysis.analyzer]
+implementation = "openplaceholder.impl.analyzers:CinnabarAnalyzer"
