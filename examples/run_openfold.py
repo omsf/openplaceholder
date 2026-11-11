@@ -5,8 +5,8 @@ import os
 import tomllib
 from pathlib import Path
 
-from openplaceholder.impl.generator.archiver import JSONArchiver, JSONArchiverConfig
-from openplaceholder.impl.generator.openfold3 import (
+from fluvial.impl.generator.archiver import JSONArchiver, JSONArchiverConfig
+from fluvial.impl.generator.openfold3 import (
     OpenFold3Generator,
     OpenFold3GeneratorConfig,
 )
@@ -32,7 +32,7 @@ if __name__ == "__main__":
         logging.info("Overriding generator directory with %s", gendir)
         generator_config["generator_directory"] = gendir
 
-    if not generator_config["implementation"] == "openplaceholder.impl.generator.openfold3:OpenFold3Generator":
+    if not generator_config["implementation"] == "fluvial.impl.generator.openfold3:OpenFold3Generator":
         raise ValueError("This script is only configured to run the OpenFold3Generator")
 
     # in theory you could double splat these into the

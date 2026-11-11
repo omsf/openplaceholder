@@ -1,0 +1,12 @@
+from fluvial.impl.validators import StereoValidator, StereoValidatorConfig
+
+
+class TestStereoValidator:
+
+    def test_config_defaults(self) -> None:
+        config = StereoValidatorConfig()
+        assert config.require_inchi_match is True
+        assert config.require_smiles_match is True
+
+    def test_initialization(self) -> None:
+        StereoValidator(StereoValidatorConfig())

@@ -1,5 +1,5 @@
 [project]
-name = "openplaceholder"
+name = "fluvial"
 description = "an opionionated co-folding to FEP pipeline"
 readme = "README.md"
 license = "MIT"
@@ -35,7 +35,7 @@ dependencies = [
 dynamic = ["version"]
 
 [project.scripts]
-oph = "openplaceholder.cli:cli"
+flv = "fluvial.cli:cli"
 
 [project.optional-dependencies]
 test = [
@@ -45,7 +45,7 @@ test = [
     "pytest",
 ]
 dev = [
-    "openplaceholder[test]",
+    "fluvial[test]",
     "pdbpp",
     "flake8"
 ]
@@ -67,7 +67,7 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.package-data]
-openplaceholder = ["./src/openplaceholder/tests/data/structures/*"]
+fluvial = ["./src/fluvial/tests/data/structures/*"]
 
 [tool.black]
 line-length = 120
@@ -97,7 +97,7 @@ biotite = "*"
 prefect = "*"
 
 [tool.pixi.pypi-dependencies]
-openplaceholder = { path = ".", editable = true }
+fluvial = { path = ".", editable = true }
 # the durrantlab dimorphite-dl rewrite (protonate_smiles API) is PyPI-only;
 # conda-forge ships a different, older lineage. Its rdkit<2026 cap is a
 # conservative upper bound (verified working with rdkit 2026.3.2), relaxed

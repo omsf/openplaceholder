@@ -2,12 +2,12 @@
 
 ## Dependency support
 
-openplaceholder follows [SPEC0](https://scientific-python.org/specs/spec-0000/).
+fluvial follows [SPEC0](https://scientific-python.org/specs/spec-0000/).
 
 ## Environment management
 
-openplaceholder uses pixi for management of the development environment.
-Users of openplaceholder should not be concerned with this, as they should install from source, pypi, and conda-forge (as they become available).
+fluvial uses pixi for management of the development environment.
+Users of fluvial should not be concerned with this, as they should install from source, pypi, and conda-forge (as they become available).
 
 ## Running tests
 

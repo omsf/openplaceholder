@@ -1,0 +1,91 @@
+import tempfile
+from pathlib import Path
+
+from fluvial.core.loader import load_toml
+from fluvial.core.pipeline import Pipeline
+from fluvial.impl.generator.openfold3 import (
+    OpenFold3Generator,
+    OpenFold3GeneratorConfig,
+)
+from fluvial.impl.mappers import LOMAPMapper
+from fluvial.impl.normalizers import BindingSiteAligner
+from fluvial.impl.selector.mpo import MPOSelector
+from fluvial.impl.transformations import (
+    ComplexProtonationTransformation,
+    HeavyAtomAdditionTransformation,
+    MaxVolumeSiteSubstitutionTransformation,
+)
+from fluvial.impl.validators import PosebustersValidator
+
+CONFIG_TEMPLATE = """
+[generation.generator]
+implementation = "fluvial.impl.generator.openfold3:OpenFold3Generator"
+n_diffusion_samples = 5
+generate_n_seeds = 5
+generator_directory = "{generator_directory}"
+sequence = "MGS"
+
+[generation.generator.ligands]
+lig_a = "C1=CC=CC=C1"
+
+[[selection.validators]]
+implementation = "fluvial.impl.validators:PosebustersValidator"
+
+[[selection.normalizers]]
+implementation = "fluvial.impl.normalizers:BindingSiteAligner"
+
+[selection.selector]
+implementation = "fluvial.impl.selector.mpo:MPOSelector"
+
+[selection.selector.objectives]
+VolumeOverlapObjective = {{ weight = 1.0 }}
+
+[[assembly.transformations]]
+implementation = "fluvial.impl.transformations:MaxVolumeSiteSubstitutionTransformation"
+
+[[assembly.transformations]]
+implementation = "fluvial.impl.transformations:HeavyAtomAdditionTransformation"
+
+[[assembly.transformations]]
+implementation = "fluvial.impl.transformations:ComplexProtonationTransformation"
+ph = 7.0
+
+[assembly.mapping]
+implementation = "fluvial.impl.mappers:LOMAPMapper"
+
+[simulation.simulator]
+implementation = "fluvial.impl.simulators:OpenFESimulator"
+simulation_directory = "./outdir/"
+"""
+
+
+class TestResolvePipeline:
+
+    def test_resolve_pipeline_from_toml(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path = Path(tmpdir) / "config.toml"
+            config_path.write_text(CONFIG_TEMPLATE.format(generator_directory=tmpdir))
+
+            pipeline = Pipeline.from_config_map(load_toml(config_path))
+
+            generator = pipeline.plugins[0][1]
+            assert isinstance(generator, OpenFold3Generator)
+            assert isinstance(generator._config, OpenFold3GeneratorConfig)
+            assert generator._config.sequence == "MGS"
+            assert generator._config.ligands == {"lig_a": "C1=CC=CC=C1"}
+
+            assert isinstance(pipeline.plugins[1][1], PosebustersValidator)
+
+            assert isinstance(pipeline.plugins[2][1], BindingSiteAligner)
+
+            selector = pipeline.plugins[3][1]
+            assert isinstance(selector, MPOSelector)
+            assert "VolumeOverlapObjective" in selector._config.objectives
+
+            assert isinstance(pipeline.plugins[4][1], MaxVolumeSiteSubstitutionTransformation)
+            assert isinstance(pipeline.plugins[5][1], HeavyAtomAdditionTransformation)
+            protonation = pipeline.plugins[6][1]
+            assert isinstance(protonation, ComplexProtonationTransformation)
+            assert protonation._config.ph == 7.0
+
+            assert isinstance(pipeline.plugins[7][1], LOMAPMapper)

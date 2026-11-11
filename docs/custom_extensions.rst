@@ -1,24 +1,24 @@
 Using extensions
 ================
 
-OpenPlaceHolder prioritizes custom extensions through a plugin system. This allows for rapid development of new modules without the need to maintain a copy of the OpenPlaceHolder repository.
+Fluvial prioritizes custom extensions through a plugin system. This allows for rapid development of new modules without the need to maintain a copy of the Fluvial repository.
 
-Custom modules can be declared in the ``config.toml`` by providing a class path in the implementation field. For instance, a custom ``Validator`` could be added to the list of OpenPlaceHolder ``Validator`` implementations by including a new table in the configuration.  
+Custom modules can be declared in the ``config.toml`` by providing a class path in the implementation field. For instance, a custom ``Validator`` could be added to the list of Fluvial ``Validator`` implementations by including a new table in the configuration.
 
 .. code:: toml
 
    [[selection.validators]]
-   implementation = "openplaceholder.impl.validators:PosebustersValidator"
+   implementation = "fluvial.impl.validators:PosebustersValidator"
 
    [[selection.validators]]
-   implementation = "openplaceholder.impl.validators:StereoValidator"
+   implementation = "fluvial.impl.validators:StereoValidator"
 
    # Add a new validator table
    [[selection.validators]]
    implementation = "mycustommodules.validators:MyCustomValidator"
    option_1 = "custom config data"
 
-Essentially, OpenPlaceHolder makes no distinction between user-defined modules and its own predefined modules.
+Essentially, Fluvial makes no distinction between user-defined modules and its own predefined modules.
 
 Creating a module
 -----------------
@@ -29,8 +29,8 @@ Using the ``Validator`` module as an example, one only needs to implement a conf
 
     from dataclasses import dataclass
 
-    from openplaceholder.core.selection.validator import ValidatorConfigBase, Validator
-    from openplaceholder.core.structure import Structure
+    from fluvial.core.selection.validator import ValidatorConfigBase, Validator
+    from fluvial.core.structure import Structure
 
     @dataclass(frozen=True)
     class MyCustomValidatorConfig(ValidatorConfigBase):
