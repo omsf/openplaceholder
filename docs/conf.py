@@ -6,7 +6,7 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = "openplaceholder"
+project = "fluvial"
 copyright = "2026, Ian Kenney, Jenke Scheen"
 author = "Ian Kenney, Jenke Scheen"
 

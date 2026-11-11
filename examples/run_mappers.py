@@ -2,12 +2,12 @@ import logging
 import tomllib
 from pathlib import Path
 
-from openplaceholder.core.assembly.mapper import Mapper
-from openplaceholder.core.loader import _build_plugin
-from openplaceholder.core.structure import StructureSeries
+from fluvial.core.assembly.mapper import Mapper
+from fluvial.core.loader import _build_plugin
+from fluvial.core.structure import StructureSeries
 
 logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger("OPH-RUN-MAPPER")
+logger = logging.getLogger("FLV-RUN-MAPPER")
 
 TOML_CONFIG = Path(__file__).parents[1] / "config.toml"
 

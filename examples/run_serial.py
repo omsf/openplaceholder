@@ -3,9 +3,9 @@
 import logging
 from pathlib import Path
 
-from openplaceholder.core.loader import load_toml
-from openplaceholder.core.pipeline import Pipeline
-from openplaceholder.core.runner import run_serial
+from fluvial.core.loader import load_toml
+from fluvial.core.pipeline import Pipeline
+from fluvial.core.runner import run_serial
 
 logging.basicConfig(level=logging.INFO)
 

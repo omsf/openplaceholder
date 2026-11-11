@@ -5,11 +5,11 @@ from pathlib import Path
 
 from gufe.tokenization import GufeKey
 
-from openplaceholder.core.io import DataRef
-from openplaceholder.core.loader import load_toml
-from openplaceholder.core.orchestration.flow import run_prefect_ray
-from openplaceholder.core.pipeline import Pipeline, Stage
-from openplaceholder.core.structure import StructureSeries
+from fluvial.core.io import DataRef
+from fluvial.core.loader import load_toml
+from fluvial.core.orchestration.flow import run_prefect_ray
+from fluvial.core.pipeline import Pipeline, Stage
+from fluvial.core.structure import StructureSeries
 
 logging.basicConfig(level=logging.INFO)
 TOML_CONFIG = Path(__file__).parents[1] / "config.toml"

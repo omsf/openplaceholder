@@ -1,5 +1,5 @@
 [generation.generator]
-implementation = "openplaceholder.impl.generator.openfold3:OpenFold3Generator"
+implementation = "fluvial.impl.generator.openfold3:OpenFold3Generator"
 # runs OpenFold3 through its CLI entry point as a subprocess; without this the
 # generator takes the (unimplemented) in-process path
 run_openfold_path = "run_openfold"
@@ -29,17 +29,17 @@ jmc_30 = 'N#C[C@@H]1C[C@@H]1C(=O)Nc1cc(NC(=O)c2c(Cl)cccc2Cl)ccn1'
 # per-structure physical/chemical validation. each must pass.
 # multiple validators can be stacked.
 [[selection.validators]]
-implementation = "openplaceholder.impl.validators:PosebustersValidator"
+implementation = "fluvial.impl.validators:PosebustersValidator"
 
 [[selection.validators]]
-implementation = "openplaceholder.impl.validators:StereoValidator"
+implementation = "fluvial.impl.validators:StereoValidator"
 
 [[selection.normalizers]]
-implementation = "openplaceholder.impl.normalizers:BindingSiteAligner"
+implementation = "fluvial.impl.normalizers:BindingSiteAligner"
 radius = 6.0
 
 [selection.selector]
-implementation = "openplaceholder.impl.selector.mpo:MPOSelector"
+implementation = "fluvial.impl.selector.mpo:MPOSelector"
 
 # objectives to optimize over, keyed by class name; "weight" sets its weight in
 # the combination, remaining keys are passed to the objective's config
@@ -49,22 +49,22 @@ IFPSimilarityObjective = { weight = 1.0 }
 
 
 [[assembly.transformations]]
-implementation = "openplaceholder.impl.transformations:MaxVolumeSiteSubstitutionTransformation"
+implementation = "fluvial.impl.transformations:MaxVolumeSiteSubstitutionTransformation"
 
 [[assembly.transformations]]
-implementation = "openplaceholder.impl.transformations:HeavyAtomAdditionTransformation"
+implementation = "fluvial.impl.transformations:HeavyAtomAdditionTransformation"
 
 [[assembly.transformations]]
-implementation = "openplaceholder.impl.transformations:ComplexProtonationTransformation"
+implementation = "fluvial.impl.transformations:ComplexProtonationTransformation"
 ph = 7.0
 
 [assembly.mapping]
-implementation = "openplaceholder.impl.mappers:KartografMapper"
+implementation = "fluvial.impl.mappers:KartografMapper"
 
 [simulation.simulator]
-implementation = "openplaceholder.impl.simulators:OpenFESimulator"
+implementation = "fluvial.impl.simulators:OpenFESimulator"
 simulation_directory = "/tmp/openfe_simulator/tyk2"
 production_length_ns = 5.0
 
 [analysis.analyzer]
-implementation = "openplaceholder.impl.analyzers:CinnabarAnalyzer"
+implementation = "fluvial.impl.analyzers:CinnabarAnalyzer"

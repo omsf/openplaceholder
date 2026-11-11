@@ -1,1 +1,1 @@
-include src/openplaceholder/tests/data/structures/*.pdb.gz
+include src/fluvial/tests/data/structures/*.pdb.gz
