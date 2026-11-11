@@ -1,7 +1,7 @@
 Installation
 ============
 
-``fluvial`` is currently only installable via source code and environments are managed through `pixi <https://pixi.prefix.dev/latest/>`_.
+Fluvial is currently only installable via source code and environments are managed through `pixi <https://pixi.prefix.dev/latest/>`_.
 
 To obtain a copy of the source code, use ``git clone`` by running
 
@@ -23,4 +23,4 @@ The package can then be installed and tested with pixi.
    cd fluvial
    pixi run pytest src/
 
-This will test that the core functionality of ``fluvial`` is operating correctly. In order to generate structures with `openfold3 <https://openfold-3.readthedocs.io/en/latest/>`_, a pre-existing version of openfold must be installed on the system according `their documentation <https://openfold-3.readthedocs.io/en/latest/Installation.html>`_.
+This will test that the core functionality of Fluvial is operating correctly. In order to generate structures with `openfold3 <https://openfold-3.readthedocs.io/en/latest/>`_, a pre-existing version of openfold must be installed on the system according `their documentation <https://openfold-3.readthedocs.io/en/latest/Installation.html>`_.

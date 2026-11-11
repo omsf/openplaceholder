@@ -6,7 +6,7 @@ Automated testing and code quality
 
 Testing is performed with `pytest <https://pytest.org/>`_, targeting the ``fluvial.tests`` subpackage.
 
-The correctness of ``fluvial`` depends heavily on the `Python static typing <https://typing.python.org/en/latest/>`_, which is strictly checked with `mypy <https://mypy.readthedocs.io/en/stable/>`_.
+The correctness of Fluvial depends heavily on the `Python static typing <https://typing.python.org/en/latest/>`_, which is strictly checked with `mypy <https://mypy.readthedocs.io/en/stable/>`_.
 
 Code style
 ----------

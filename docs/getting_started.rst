@@ -1,7 +1,7 @@
 Getting started
 ===============
 
-``fluvial`` is designed to provide a declaratively composed pipeline for generating the complex structures for a congeneric series, executing physics-based simulations, and returning binding free energy estimates.
+Fluvial is designed to provide a declaratively composed pipeline for generating the complex structures for a congeneric series, executing physics-based simulations, and returning binding free energy estimates.
 
 As an example, the following configuration file defines a pipeline for a congeneric series of four ligands bound to `TYK2 <https://github.com/OpenFreeEnergy/IndustryBenchmarks2024/tree/main>`_. A full example file can be found `in the source code <https://github.com/omsf/fluvial/blob/main/config.toml>`_.
 

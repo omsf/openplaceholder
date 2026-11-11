@@ -1,9 +1,9 @@
 Using extensions
 ================
 
-``fluvial`` prioritizes custom extensions through a plugin system. This allows for rapid development of new modules without the need to maintain a copy of the ``fluvial`` repository.
+Fluvial prioritizes custom extensions through a plugin system. This allows for rapid development of new modules without the need to maintain a copy of the Fluvial repository.
 
-Custom modules can be declared in the ``config.toml`` by providing a class path in the implementation field. For instance, a custom ``Validator`` could be added to the list of ``fluvial`` ``Validator`` implementations by including a new table in the configuration.  
+Custom modules can be declared in the ``config.toml`` by providing a class path in the implementation field. For instance, a custom ``Validator`` could be added to the list of Fluvial ``Validator`` implementations by including a new table in the configuration.
 
 .. code:: toml
 
@@ -18,7 +18,7 @@ Custom modules can be declared in the ``config.toml`` by providing a class path 
    implementation = "mycustommodules.validators:MyCustomValidator"
    option_1 = "custom config data"
 
-Essentially, ``fluvial`` makes no distinction between user-defined modules and its own predefined modules.
+Essentially, Fluvial makes no distinction between user-defined modules and its own predefined modules.
 
 Creating a module
 -----------------

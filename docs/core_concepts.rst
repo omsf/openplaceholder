@@ -55,9 +55,9 @@ Pipeline module overview
 Core Versus Implementation
 -----------------------------
 
-``fluvial`` defines a set of abstract classes for key modules in the pipeline. These abstract classes are part of the ``fluvial.core`` subpackage. They define the expectations and inter-module data types that tie the pipeline together. This core defines the high level view of how a pipeline is constructed.
+Fluvial defines a set of abstract classes for key modules in the pipeline. These abstract classes are part of the ``fluvial.core`` subpackage. They define the expectations and inter-module data types that tie the pipeline together. This core defines the high level view of how a pipeline is constructed.
 
-Concrete implementations of the core classes are required for a pipeline to be functional. For instance, the ``PosebustersValidator`` class is a concrete implementation of the ``Validator`` abstract class and adheres to the requirements imposed by the ``Validator`` abstract class. The concrete classes and related functionality are part of the ``fluvial.impl`` subpackage. These are just the shipped implementations, but ``fluvial`` allows users to define their own implementations outside of the default implementation subpackage.
+Concrete implementations of the core classes are required for a pipeline to be functional. For instance, the ``PosebustersValidator`` class is a concrete implementation of the ``Validator`` abstract class and adheres to the requirements imposed by the ``Validator`` abstract class. The concrete classes and related functionality are part of the ``fluvial.impl`` subpackage. These are just the shipped implementations, but Fluvial allows users to define their own implementations outside of the default implementation subpackage.
 
 Structures and Structure Containers
 -----------------------------------
